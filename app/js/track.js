@@ -223,27 +223,64 @@ export function dropPauses(pts, D) {
   return { pts: out, removed, savedSec: offset / 1000 };
 }
 
-/** Insert a point into the nearest segment; time and sensors are interpolated. */
-export function insertPoint(pts, ll) {
-  const k = Math.cos(ll.lat * RAD), px = ll.lng * k, py = ll.lat;
-  let best = 1, bd = Infinity, bu = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const ax = pts[i - 1].lng * k, ay = pts[i - 1].lat, dx = pts[i].lng * k - ax, dy = pts[i].lat - ay;
-    const L2 = dx * dx + dy * dy;
-    const u = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
-    const ex = ax + dx * u - px, ey = ay + dy * u - py, dist = ex * ex + ey * ey;
-    if (dist < bd) { bd = dist; best = i; bu = u; }
-  }
-  const A = pts[best - 1], B = pts[best];
-  const q = { lat: ll.lat, lng: ll.lng, t: Math.round(A.t + (B.t - A.t) * bu), fixed: true };
-  for (const c of CHANNELS) q[c] = lerp(A[c], B[c], bu);
-  return { pts: pts.slice(0, best).concat([q], pts.slice(best)), index: best };
+/** Position of ll projected onto segment A→B: fraction u (0..1) and squared distance in local degrees. */
+function project(A, B, ll) {
+  const k = Math.cos(ll.lat * RAD), px = ll.lng * k, ax = A.lng * k, dx = B.lng * k - ax, dy = B.lat - A.lat;
+  const L2 = dx * dx + dy * dy;
+  const u = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (ll.lat - A.lat) * dy) / L2)) : 0;
+  const ex = ax + dx * u - px, ey = A.lat + dy * u - ll.lat;
+  return { u, d2: ex * ex + ey * ey };
 }
 
-export function movePoint(pts, i, ll) {
-  const out = pts.slice();
-  out[i] = { ...pts[i], lat: ll.lat, lng: ll.lng, fixed: true };
+/** A new point at ll between A and B at fraction u; time and sensors are interpolated. */
+function between(A, B, ll, u) {
+  const q = { lat: ll.lat, lng: ll.lng, t: Math.round(A.t + (B.t - A.t) * u), fixed: true };
+  for (const c of CHANNELS) q[c] = lerp(A[c], B[c], u);
+  return q;
+}
+
+/** Insert ll into the nearest segment within points lo..hi. `onLine` is the nearest spot on the track. */
+export function insertPoint(pts, ll, lo = 0, hi = pts.length - 1) {
+  let best = Math.max(1, lo + 1), bd = Infinity, bu = 0;
+  for (let i = Math.max(1, lo + 1); i <= hi; i++) {
+    const r = project(pts[i - 1], pts[i], ll);
+    if (r.d2 < bd) { bd = r.d2; best = i; bu = r.u; }
+  }
+  const A = pts[best - 1], B = pts[best];
+  return {
+    pts: pts.slice(0, best).concat([between(A, B, ll, bu)], pts.slice(best)), index: best,
+    onLine: { lat: A.lat + (B.lat - A.lat) * bu, lng: A.lng + (B.lng - A.lng) * bu },
+  };
+}
+
+/** Insert ll as the new point k (between old k-1 and k). */
+export function insertAt(pts, k, ll) {
+  const A = pts[k - 1], B = pts[k];
+  return pts.slice(0, k).concat([between(A, B, ll, project(A, B, ll).u)], pts.slice(k));
+}
+
+/**
+ * Points lo..hi after moving point i to ll. Points strictly between lo and hi follow with a linear
+ * falloff (1 at i, 0 at lo and hi), so dragging one of sparse markers bends the line smoothly.
+ */
+export function dragShift(pts, i, ll, lo, hi) {
+  const dLat = ll.lat - pts[i].lat, dLng = ll.lng - pts[i].lng, out = [];
+  for (let j = lo; j <= hi; j++) {
+    const w = j === i ? 1 : j <= lo || j >= hi ? 0 : j < i ? (j - lo) / (i - lo) : (hi - j) / (hi - i);
+    out.push(w ? { ...pts[j], lat: pts[j].lat + dLat * w, lng: pts[j].lng + dLng * w, fixed: true } : pts[j]);
+  }
   return out;
+}
+
+export const dragPoint = (pts, i, ll, lo, hi) => pts.slice(0, lo).concat(dragShift(pts, i, ll, lo, hi), pts.slice(hi + 1));
+export const removePoint = (pts, i) => pts.slice(0, i).concat(pts.slice(i + 1));
+
+/** Drop the points inside glitch runs (anchors a and b stay), joining each run's anchors directly. */
+export function dropOutliers(pts, runs) {
+  const kill = new Uint8Array(pts.length);
+  let removed = 0;
+  for (const r of runs) for (let i = r.a + 1; i < r.b; i++) if (!kill[i]) { kill[i] = 1; removed++; }
+  return { pts: pts.filter((_, i) => !kill[i]), removed };
 }
 
 /** Evenly spaced points along a polyline, first and last included. `s` is distance from start. */

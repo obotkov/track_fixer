@@ -2,7 +2,7 @@
 import {
   THRESH, derive, trackStats, findAnomalies, findPauses, kmSplits, medianSpacing, normalize, hav,
   cutRange, keepRange, dropHead, splitAt, mergeTracks, smoothRange, dropPauses, shiftTime,
-  insertPoint, movePoint, replaceGeometry, applyElevation,
+  insertPoint, insertAt, dragShift, dragPoint, removePoint, dropOutliers, replaceGeometry, applyElevation,
 } from './track.js';
 import { parseTrackFile } from './parsers.js';
 import { routeByBike, fetchElevations } from './services.js';
@@ -20,8 +20,10 @@ const S = {
   tool: 'cut', dm: 'road', pp: 'stretch', sw: 7,
   ch: { sp: true, hr: true, pw: false },
   toast: '', busy: false, anomIdx: 0,
+  active: null,       // point index picked in the points tool
 };
-let D = null, map = null, needFit = false, freeDrawing = false;
+let D = null, map = null, needFit = false, freeDrawing = false, EM = null;
+const MAX_VERTS = 300; // editable markers shown at once; beyond that every k-th point
 const M = { stats: null, anoms: [], pauses: [], splits: [], origDist: 0 };
 const last = {};
 
@@ -68,7 +70,7 @@ function commit(pts, extra = {}) {
 function undo() {
   const h = S.history.pop();
   if (!h || S.busy) return;
-  Object.assign(S, { pts: h.pts, partB: h.partB, partBHas: h.partBHas, has: h.has, sel: null, draft: [], toast: 'Последнее действие отменено' });
+  Object.assign(S, { pts: h.pts, partB: h.partB, partBHas: h.partBHas, has: h.has, sel: null, draft: [], active: null, toast: 'Последнее действие отменено' });
   S.ver++;
   recompute();
   render();
@@ -120,7 +122,7 @@ function loadTrack(r, fileName) {
   Object.assign(S, {
     screen: 'editor', fileName, baseName: base, trackName: r.name || base, format: r.format,
     pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null,
-    ver: 0, sel: null, dragging: null, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false,
+    ver: 0, sel: null, dragging: null, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null,
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
   recompute();
@@ -238,9 +240,17 @@ function toolCfg() {
         : 'Кликайте по карте, чтобы задать правильный маршрут между краями выделения.',
       primary: 'Заменить геометрию', off: busy || !(has && (S.draft.length || S.dm === 'road')), run: applyRedraw,
       draw: true, policy: true, sec: 'Сбросить линию', secOff: !S.draft.length, secRun: () => { S.draft = []; toast(''); } };
-    case 'points': return { title: 'Добавить и переместить точки',
-      hint: 'Тяните квадратные маркеры на карте. Клик по карте вставляет точку в ближайший сегмент. Выделите короткий промежуток, чтобы маркеры шли чаще.',
-      primary: 'Готово', off: false, run: () => { S.tool = 'cut'; toast('Правка точек завершена'); } };
+    case 'points': {
+      const m = getEM();
+      return { title: 'Точки: правка выбросов на карте',
+        hint: (has ? '' : 'Выделите на трек-лайне участок с выбросом — его точки появятся на карте. ')
+          + 'Тяните точки мышью — линия перестраивается на лету, время и датчики остаются. Новая точка — потяните или кликните «+» между точками (появляются при приближении карты), либо кликните рядом с линией.'
+          + (m.step > 1 ? ` Показана каждая ${m.step}-я точка: скрытые соседи сдвигаются плавно вместе с ней. Выделите участок короче, чтобы править каждую.` : '')
+          + (m.bad.size ? ` Точек-выбросов: ${m.bad.size}, они закрашены.` : ''),
+        primary: 'Готово', off: false, run: () => { S.tool = 'cut'; S.active = null; toast('Правка точек завершена'); },
+        sec: m.outliers ? `Удалить выбросы (${m.outliers})` : null, secOff: false,
+        secRun: () => { const r = dropOutliers(S.pts, m.runs); commit(r.pts, { sel: null, active: null, toast: `Удалено ${r.removed} точек-выбросов · края участков соединены` }); } };
+    }
     case 'smooth': return { title: 'Сгладить GPS-шум', hint: 'Скользящее среднее по координатам внутри выделения. Высота, скорость и датчики не меняются.',
       primary: 'Сгладить', off: !has, smooth: true,
       run: () => commit(smoothRange(S.pts, sp.a, sp.b, S.sw), { toast: `GPS-шум сглажен · окно ${S.sw} точек` }) };
@@ -473,16 +483,21 @@ function drawMap() {
   if (last.sel !== selKey) { last.sel = selKey; map.setSel(S.pts, sp); }
   const draftKey = selKey + '|' + S.draft.length + '|' + S.dm;
   if (last.draft !== draftKey) { last.draft = draftKey; map.setDraft(S.pts, sp, S.draft, S.dm !== 'free'); }
-  const editKey = selKey + '|' + S.tool;
-  if (last.edit !== editKey) {
-    last.edit = editKey;
-    map.setEdit(S.pts, sp, S.tool === 'points', (i, ll) => commit(movePoint(S.pts, i, ll), { toast: `Точка ${i + 1} перемещена · параметры сохранены` }));
+  if (S.tool !== 'points') {
+    if (last.edit !== 'off') { last.edit = 'off'; map.setEdit(null); }
+  } else if (S.dragging == null) { // rebuild markers once the chart selection settles
+    const em = getEM();
+    if (last.edit !== em.key) {
+      last.edit = em.key;
+      map.setEdit({ pts: S.pts, idx: em.idx, bad: em.bad, cb: editCb });
+      map.setActiveVertex(S.active);
+    }
   }
   const drawing = S.tool === 'redraw' && S.dm === 'free' && !!sp;
-  map.setMode({ drawing, crosshair: (S.tool === 'redraw' && !!sp) || S.tool === 'points' });
+  map.setMode({ drawing, crosshair: (S.tool === 'redraw' && !!sp) || S.tool === 'points', editing: S.tool === 'points' });
   $('mapHint').textContent = S.tool === 'redraw'
     ? (sp ? (S.dm === 'free' ? 'Тяните по карте, чтобы нарисовать линию' : 'Кликайте по карте — точки новой линии') : 'Выделите промежуток на трек-лайне')
-    : S.tool === 'points' ? 'Тяните маркеры · клик вставляет точку'
+    : S.tool === 'points' ? 'Тяните точки · «+» или клик у линии — добавить · двойной клик — удалить · стрелки — сдвиг'
     : S.pts !== S.orig ? 'Пунктир — исходная геометрия, сплошная — текущая' : 'Сплошная — трек из файла · квадрат — старт, круг — финиш';
   if (needFit) { needFit = false; requestAnimationFrame(() => map.fit(S.pts)); }
 }
@@ -495,6 +510,77 @@ function drawHover() {
   map.setHover(S.hover != null ? S.pts[S.hover] : null);
 }
 
+/* ───────────── points tool ───────────── */
+
+/** Which points of the range get markers: every step-th, plus all glitch points and the active one. */
+function editModel() {
+  const sp = span(), n = S.pts.length, a = sp ? sp.a : 0, b = sp ? sp.b : n - 1;
+  const step = Math.max(1, Math.ceil((b - a + 1) / MAX_VERTS));
+  const bad = new Set(), runs = [];
+  let outliers = 0;
+  for (const r of M.anoms) {
+    if (r.b <= a || r.a >= b) continue;
+    if (r.b - r.a >= 2) { runs.push(r); outliers += r.b - r.a - 1; }
+    for (let i = Math.max(r.a + 1, a); i <= Math.min(r.b - 1, b); i++) bad.add(i);
+  }
+  const shown = new Set(bad);
+  for (let i = a; i <= b; i += step) shown.add(i);
+  shown.add(b);
+  if (S.active != null && S.active >= a && S.active <= b) shown.add(S.active);
+  return { a, b, step, bad, runs, outliers, idx: [...shown].sort((x, y) => x - y) };
+}
+
+function getEM() {
+  const sp = span(), key = S.ver + '|' + (sp ? sp.a + ':' + sp.b : '-');
+  if (!EM || EM.key !== key) EM = { key, ...editModel() };
+  return EM;
+}
+
+/** Neighbouring markers of point i — the span a drag of i bends. */
+function vertexBounds(i) {
+  const idx = getEM().idx, k = idx.indexOf(i), n = S.pts.length;
+  return [k > 0 ? idx[k - 1] : Math.max(0, i - 1), k >= 0 && k < idx.length - 1 ? idx[k + 1] : Math.min(n - 1, i + 1)];
+}
+
+/** Selection after inserting (delta +1) or removing (delta −1) point k. */
+function shiftSel(k, delta) {
+  const sp = span();
+  if (!sp) return null;
+  const a = delta > 0 ? (k <= sp.a ? sp.a + 1 : sp.a) : (k < sp.a ? sp.a - 1 : sp.a);
+  const b = delta > 0 ? (k <= sp.b ? sp.b + 1 : sp.b) : (k <= sp.b ? sp.b - 1 : sp.b);
+  return b - a >= 1 ? { a, b } : null;
+}
+
+const fmtDist = m => (m < 1000 ? Math.round(m) + ' м' : km(m) + ' км');
+
+const editCb = {
+  preview: (i, ll) => { const [lo, hi] = vertexBounds(i); return dragShift(S.pts, i, ll, lo, hi).map(p => [p.lat, p.lng]); },
+  move(i, ll) {
+    const [lo, hi] = vertexBounds(i), follow = hi - lo - 2, d = hav(S.pts[i], ll);
+    commit(dragPoint(S.pts, i, ll, lo, hi), {
+      active: i, hover: i,
+      toast: `Точка ${i + 1} сдвинута на ${fmtDist(d)}` + (follow > 0 ? ` · ${follow} соседних точек сдвинуты плавно` : '') + ' · время и датчики сохранены',
+    });
+  },
+  insert(k, ll) {
+    commit(insertAt(S.pts, k, ll), { sel: shiftSel(k, 1), active: k, hover: k, toast: `Добавлена точка ${k + 1} · время и датчики интерполированы` });
+  },
+  remove(i) {
+    if (S.pts.length <= 2) return;
+    commit(removePoint(S.pts, i), { sel: shiftSel(i, -1), active: null, hover: null, toast: `Точка ${i + 1} удалена` });
+  },
+  activate(i) { S.active = i; S.hover = i; if (map) map.setActiveVertex(i); render(); },
+  hover(i) { S.hover = i; render(); },
+};
+
+function nudge(north, east, meters) {
+  const p = S.pts[S.active];
+  editCb.move(S.active, {
+    lat: p.lat + north * meters / 111320,
+    lng: p.lng + east * meters / (111320 * Math.cos(p.lat * Math.PI / 180)),
+  });
+}
+
 /* ───────────── input ───────────── */
 
 const mapHandlers = {
@@ -505,9 +591,13 @@ const mapHandlers = {
       S.draft = S.draft.concat([p]);
       toast('Точек в новой линии: ' + S.draft.length);
     } else if (S.tool === 'points') {
-      const r = insertPoint(S.pts, p);
-      const sel = sp ? { a: sp.a + (r.index <= sp.a ? 1 : 0), b: sp.b + (r.index <= sp.b ? 1 : 0) } : null;
-      commit(r.pts, { sel, toast: `Точка добавлена между ${r.index} и ${r.index + 1}` });
+      const em = getEM(), r = insertPoint(S.pts, p, em.a, em.b);
+      if (map.pxDistance(p, r.onLine) > 30) {
+        editCb.activate(null);
+        toast('Чтобы добавить точку, кликните рядом с линией трека или потяните «+» между точками');
+        return;
+      }
+      commit(r.pts, { sel: shiftSel(r.index, 1), active: r.index, hover: r.index, toast: `Добавлена точка ${r.index + 1} · время и датчики интерполированы` });
     }
   },
   down(ll) {
@@ -562,7 +652,7 @@ function bind() {
     if (e.button !== 0 || !S.pts) return;
     try { chart.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     const i = idxAt(e);
-    Object.assign(S, { dragging: i, sel: { a: i, b: i }, hover: i, draft: [] });
+    Object.assign(S, { dragging: i, sel: { a: i, b: i }, hover: i, draft: [], active: null });
     render();
   });
   chart.addEventListener('pointermove', e => {
@@ -576,6 +666,7 @@ function bind() {
     if (S.dragging == null) return;
     S.dragging = null;
     if (S.sel && Math.abs(S.sel.a - S.sel.b) < 2) S.sel = null;
+    if (S.tool === 'points' && S.sel && map) map.showRange(S.pts, span(), 18);
     render();
   };
   chart.addEventListener('pointerup', release);
@@ -591,7 +682,11 @@ function bind() {
     const b = node('button', 'btn btn-secondary', label);
     b.type = 'button';
     b.dataset.tool = id;
-    b.addEventListener('click', () => { Object.assign(S, { tool: id, draft: [], toast: '' }); render(); });
+    b.addEventListener('click', () => {
+      Object.assign(S, { tool: id, draft: [], toast: '', active: null });
+      if (id === 'points' && S.sel && map) map.showRange(S.pts, span(), 18);
+      render();
+    });
     return b;
   }));
   document.querySelectorAll('input[name=dm]').forEach(i => i.addEventListener('change', () => { S.dm = i.value; S.draft = []; render(); }));
@@ -605,6 +700,12 @@ function bind() {
 
   document.addEventListener('keydown', e => {
     if (S.screen !== 'editor' || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
+    if (S.tool === 'points' && S.active != null && !S.busy) {
+      const dir = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
+      if (dir) { e.preventDefault(); nudge(dir[0], dir[1], e.shiftKey ? 10 : 1); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); editCb.remove(S.active); return; }
+      if (e.key === 'Escape') { editCb.activate(null); return; }
+    }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     else if (e.key === 'Escape') { S.sel = null; S.draft = []; render(); }
   });

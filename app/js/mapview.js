@@ -18,6 +18,9 @@ export class MapView {
     this.draftL = L.layerGroup().addTo(this.map);
     this.editL = L.layerGroup().addTo(this.map);
     this.hoverL = L.layerGroup().addTo(this.map);
+    this.vx = new Map();
+    this.mids = [];
+    this.map.on('zoomend', () => this.updateMids());
 
     this.map.on('click', e => handlers.click(e.latlng));
     this.map.on('mousedown', e => { if (e.originalEvent.button === 0) handlers.down(e.latlng); });
@@ -75,20 +78,65 @@ export class MapView {
     if (vertices) draft.forEach(p => L.marker(ll(p), { icon: this.sq(false), interactive: false }).addTo(g));
   }
 
-  setEdit(pts, sp, on, onMove) {
-    const g = this.editL;
+  /**
+   * Vertex editing. `idx` are point indices drawn as draggable squares (those in `bad` filled);
+   * a "+" handle sits between every two adjacent points to insert a new one.
+   * cb: preview(i, ll) → latlngs, move(i, ll), insert(k, ll), remove(i), activate(i), hover(i | null).
+   */
+  setEdit(opt) {
+    const L = this.L, g = this.editL;
     g.clearLayers();
-    if (!on) return;
-    const a = sp ? sp.a : 0, b = sp ? sp.b : pts.length - 1;
-    const step = Math.max(1, Math.ceil((b - a + 1) / 60));
-    const idx = [];
-    for (let i = a; i <= b; i += step) idx.push(i);
-    if (idx[idx.length - 1] !== b) idx.push(b);
-    idx.forEach(i => {
-      this.L.marker(ll(pts[i]), { icon: this.sq(false, true), draggable: true, autoPan: true })
-        .on('dragend', ev => onMove(i, ev.target.getLatLng()))
+    this.vx = new Map();
+    this.mids = [];
+    if (!opt) return;
+    const { pts, idx, bad, cb } = opt;
+    const preview = L.polyline([], { interactive: false, renderer: this.top, color: C.dark, weight: 2.5, dashArray: '6 4' }).addTo(g);
+    const icon = (cls, s) => L.divIcon({ className: cls, iconSize: [s, s], iconAnchor: [s / 2, s / 2] });
+
+    for (let k = 0; k + 1 < idx.length; k++) {
+      const a = idx[k], b = idx[k + 1];
+      if (b !== a + 1) continue;
+      const A = ll(pts[a]), B = ll(pts[b]), mid = { lat: (A[0] + B[0]) / 2, lng: (A[1] + B[1]) / 2 };
+      const m = L.marker(mid, { icon: icon('tf-mid', 18), draggable: true, autoPan: true, keyboard: false, zIndexOffset: -500, title: 'Потяните или кликните — новая точка' })
+        .on('drag', e => preview.setLatLngs([A, e.target.getLatLng(), B]))
+        .on('dragend', e => { preview.setLatLngs([]); cb.insert(b, e.target.getLatLng()); })
+        .on('click', () => cb.insert(b, mid))
         .addTo(g);
-    });
+      this.mids.push([m, A, B]);
+    }
+    for (const i of idx) {
+      const m = L.marker(ll(pts[i]), { icon: icon('tf-vx' + (bad.has(i) ? ' is-bad' : ''), 22), draggable: true, autoPan: true, keyboard: false, riseOnHover: true })
+        .on('dragstart', () => cb.activate(i))
+        .on('drag', e => preview.setLatLngs(cb.preview(i, e.target.getLatLng())))
+        .on('dragend', e => { preview.setLatLngs([]); cb.move(i, e.target.getLatLng()); })
+        .on('click', () => cb.activate(i))
+        .on('dblclick contextmenu', e => { L.DomEvent.stop(e.originalEvent); cb.remove(i); })
+        .on('mouseover', () => cb.hover(i))
+        .on('mouseout', () => cb.hover(null))
+        .addTo(g);
+      this.vx.set(i, m);
+    }
+    this.updateMids();
+  }
+
+  /** Hide "+" handles whose segment is too short on screen to grab without hitting a vertex. */
+  updateMids() {
+    for (const [m, A, B] of this.mids) {
+      const el = m.getElement();
+      if (el) el.style.visibility = this.map.latLngToLayerPoint(A).distanceTo(this.map.latLngToLayerPoint(B)) < 24 ? 'hidden' : '';
+    }
+  }
+
+  setActiveVertex(i) {
+    for (const [j, m] of this.vx) {
+      const el = m.getElement();
+      if (el) el.classList.toggle('is-active', j === i);
+      m.setZIndexOffset(j === i ? 1000 : 0);
+    }
+  }
+
+  pxDistance(a, b) {
+    return this.map.latLngToContainerPoint(ll(a)).distanceTo(this.map.latLngToContainerPoint(ll(b)));
   }
 
   setHover(p) {
@@ -100,13 +148,15 @@ export class MapView {
     L.circleMarker(ll(p), { ...o, radius: 3.5, color: C.dark, fillColor: C.dark, fillOpacity: 1, weight: 0 }).addTo(g);
   }
 
-  showRange(pts, sp) {
+  showRange(pts, sp, maxZoom = 17) {
     const b = this.L.latLngBounds(pts.slice(sp.a, sp.b + 1).map(ll));
-    if (b.isValid()) this.map.fitBounds(b.pad(0.6), { maxZoom: 17 });
+    if (b.isValid()) this.map.fitBounds(b.pad(0.6), { maxZoom });
   }
 
-  setMode({ drawing, crosshair }) {
+  setMode({ drawing, crosshair, editing }) {
     if (drawing) this.map.dragging.disable(); else this.map.dragging.enable();
+    // While editing points, arrows nudge the active point and double click deletes it.
+    for (const h of [this.map.keyboard, this.map.doubleClickZoom]) { if (editing) h.disable(); else h.enable(); }
     this.el.classList.toggle('is-drawing', !!crosshair);
   }
 }
