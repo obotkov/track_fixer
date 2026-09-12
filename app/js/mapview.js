@@ -1,5 +1,5 @@
 // Leaflet map: the track on a canvas renderer (fast for 50k+ points), overlays on SVG above it.
-const C = { track: '#416180', dark: '#1d2d3d', ghost: '#98989b', partB: '#7a7a7d' };
+const C = { track: '#416180', dark: '#1d2d3d', ghost: '#98989b', partB: '#7a7a7d', sel: '#e0322b', paper: '#ffffff' };
 const ll = p => [p.lat, p.lng];
 
 export class MapView {
@@ -76,9 +76,10 @@ export class MapView {
     const L = this.L, g = this.selL;
     g.clearLayers();
     if (!sp) return;
-    const o = { interactive: false, renderer: this.top };
-    L.polyline(pts.slice(sp.a, sp.b + 1).map(ll), { ...o, color: C.dark, weight: 13, opacity: 0.25, lineCap: 'round' }).addTo(g);
-    [sp.a, sp.b].forEach(i => L.circleMarker(ll(pts[i]), { ...o, radius: 5, color: C.dark, weight: 2, fillColor: '#f2f2f3', fillOpacity: 1 }).addTo(g));
+    const o = { interactive: false, renderer: this.top }, line = pts.slice(sp.a, sp.b + 1).map(ll);
+    L.polyline(line, { ...o, color: C.sel, weight: 12, opacity: 0.22, lineCap: 'round' }).addTo(g);
+    L.polyline(line, { ...o, color: C.sel, weight: 4, opacity: 0.95, lineJoin: 'round' }).addTo(g);
+    [sp.a, sp.b].forEach(i => L.circleMarker(ll(pts[i]), { ...o, radius: 5, color: C.sel, weight: 2.5, fillColor: C.paper, fillOpacity: 1 }).addTo(g));
   }
 
   setDraft(pts, sp, draft, vertices) {
@@ -150,13 +151,18 @@ export class MapView {
     return this.map.latLngToContainerPoint(ll(a)).distanceTo(this.map.latLngToContainerPoint(ll(b)));
   }
 
+  /** The red point that runs along the track with the track-line cursor; moved, not recreated. */
   setHover(p) {
-    const L = this.L, g = this.hoverL;
-    g.clearLayers();
-    if (!p) return;
-    const o = { interactive: false, renderer: this.top };
-    L.circleMarker(ll(p), { ...o, radius: 9, color: C.dark, weight: 1.2, fill: false }).addTo(g);
-    L.circleMarker(ll(p), { ...o, radius: 3.5, color: C.dark, fillColor: C.dark, fillOpacity: 1, weight: 0 }).addTo(g);
+    if (!p) { this.hoverL.clearLayers(); this.hv = null; return; }
+    if (!this.hv) {
+      const o = { interactive: false, renderer: this.top };
+      this.hv = [
+        this.L.circleMarker(ll(p), { ...o, radius: 11, color: C.sel, weight: 1.5, fillColor: C.sel, fillOpacity: 0.15 }),
+        this.L.circleMarker(ll(p), { ...o, radius: 5.5, color: C.paper, weight: 2, fillColor: C.sel, fillOpacity: 1 }),
+      ];
+      this.hv.forEach(m => m.addTo(this.hoverL));
+    }
+    this.hv.forEach(m => m.setLatLng(ll(p)));
   }
 
   showRange(pts, sp, maxZoom = 17) {
