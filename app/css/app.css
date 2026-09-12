@@ -41,14 +41,14 @@ a:hover { color: var(--color-accent-700); }
 .stat-n { font-size: 10.5px; }
 
 .workspace { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: stretch; }
-.mapfig { flex: 1 1 440px; min-width: 300px; margin: 0; display: flex; flex-direction: column; background: var(--color-surface); }
-#map { width: 100%; flex: 1 1 auto; min-height: min(56vh, 520px); }
+.mapfig { flex: 1 1 100%; min-width: 0; margin: 0; display: flex; flex-direction: column; background: var(--color-surface); }
+#map { width: 100%; flex: 1 1 auto; min-height: min(62vh, 620px); }
 #map.is-drawing, #map.is-drawing .leaflet-interactive { cursor: crosshair; }
 .mapfig figcaption { margin: 0; padding: var(--space-2) var(--space-3); display: flex; flex-wrap: wrap; gap: var(--space-3); border-top: 1px solid var(--color-divider); background: var(--color-bg); }
 .mapfig figcaption .hover { margin-left: auto; font-variant-numeric: tabular-nums; }
 
-.side { flex: 1 1 280px; max-width: 340px; display: flex; flex-direction: column; gap: var(--space-3); }
-@media (max-width: 760px) { .side { max-width: none; } }
+/* diagnostics · selection · km splits — one row under the map, wrapping on narrow screens */
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); align-items: stretch; }
 .panel { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
 .panel h6 { margin: 0; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
