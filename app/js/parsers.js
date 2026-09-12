@@ -10,21 +10,22 @@ export async function parseTrackFile(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   const isFit = u8.length > 12 && String.fromCharCode(u8[8], u8[9], u8[10], u8[11]) === '.FIT';
 
-  let raw, name = null, format;
+  // summary: totals the device wrote itself (calories, distance), when the format carries them.
+  let raw, name = null, format, summary = {};
   if (isFit || ext === 'fit') {
-    raw = parseFIT(buf);
+    ({ raw, summary } = parseFIT(buf));
     format = 'FIT';
   } else {
     const text = decodeText(u8);
     const head = text.slice(0, 4000);
     const doc = parseXML(text);
-    if (/<TrainingCenterDatabase/i.test(head) || ext === 'tcx') { raw = parseTCX(doc); format = 'TCX'; }
+    if (/<TrainingCenterDatabase/i.test(head) || ext === 'tcx') { raw = parseTCX(doc); summary = tcxSummary(doc); format = 'TCX'; }
     else if (/<gpx[\s>]/i.test(head) || ext === 'gpx') { ({ raw, name } = parseGPX(doc)); format = 'GPX'; }
     else throw new Error('Неизвестный формат. Поддерживаются GPX, FIT и TCX.');
   }
   if (!raw.length) throw new Error('В файле не найдено ни одной точки трека.');
   const { pts, has } = normalize(raw);
-  return { pts, has, name, format };
+  return { pts, has, name, format, summary };
 }
 
 /* ───────────── XML ───────────── */
@@ -89,6 +90,18 @@ function parseTCX(doc) {
   return raw;
 }
 
+/** Lap totals of a TCX activity: calories and distance the device recorded. */
+function tcxSummary(doc) {
+  const sum = {};
+  for (const lap of doc.getElementsByTagNameNS('*', 'Lap')) {
+    const own = name => [...lap.children].find(c => c.localName === name);
+    const kcal = own('Calories'), dist = own('DistanceMeters');
+    if (kcal) sum.calories = (sum.calories || 0) + fl(kcal.textContent);
+    if (dist) sum.distance = (sum.distance || 0) + fl(dist.textContent);
+  }
+  return sum;
+}
+
 /* ───────────── FIT (binary) ───────────── */
 
 const FIT_EPOCH = 631065600000;         // 1989-12-31T00:00:00Z
@@ -110,7 +123,7 @@ function readField(dv, pos, size, bt, le) {
 }
 
 function parseFIT(buf) {
-  const dv = new DataView(buf), u8 = new Uint8Array(buf), raw = [];
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), raw = [], summary = {};
   let off = 0;
   // A .fit may hold several chained FIT files; read them all.
   while (off + 12 <= u8.length) {
@@ -120,13 +133,13 @@ function parseFIT(buf) {
       break;
     }
     const end = Math.min(off + hs + dv.getUint32(off + 4, true), u8.length);
-    readFitRecords(dv, u8, off + hs, end, raw);
+    readFitRecords(dv, u8, off + hs, end, raw, summary);
     off = end + 2;
   }
-  return raw;
+  return { raw, summary };
 }
 
-function readFitRecords(dv, u8, pos, end, raw) {
+function readFitRecords(dv, u8, pos, end, raw, summary) {
   const defs = [];
   let lastTs = null;
   while (pos < end) {
@@ -152,7 +165,7 @@ function readFitRecords(dv, u8, pos, end, raw) {
 
     if (!def) throw new Error('FIT-файл повреждён: сообщение без определения.');
     if (pos + def.size > end) break;
-    const rec = def.gnum === 20 ? {} : null;     // 20 = record
+    const rec = def.gnum === 20 || def.gnum === 18 ? {} : null;     // 20 = record, 18 = session totals
     let p = pos;
     for (const [num, size, bt] of def.fields) {
       if (num === 253 || rec) {
@@ -164,6 +177,11 @@ function readFitRecords(dv, u8, pos, end, raw) {
     }
     pos += def.size;
     if (!rec) continue;
+    if (def.gnum === 18) {   // session: 11 total_calories (kcal), 9 total_distance (cm); summed over sessions
+      if (rec[11] != null) summary.calories = (summary.calories || 0) + rec[11];
+      if (rec[9] != null) summary.distance = (summary.distance || 0) + rec[9] / 100;
+      continue;
+    }
     const ts = rec[253] ?? tsOverride;
     const alt = rec[78] != null ? rec[78] / 5 - 500 : rec[2] != null ? rec[2] / 5 - 500 : null;
     raw.push({

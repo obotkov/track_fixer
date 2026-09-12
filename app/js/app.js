@@ -128,13 +128,13 @@ function loadTrack(r, fileName) {
   // at 0 made a freshly opened file hit the previous track's cache and leave it on screen.
   Object.assign(S, {
     fileName, baseName: base, trackName: r.name || base, format: r.format,
-    pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null,
+    pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null, fileSum: r.summary || {},
     ver: S.ver + 1, sel: null, dragging: null, dragEdge: false, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false,
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
   recompute();
   M.origDist = M.stats.dist;
-  const sensors = ['скорость', r.has.ele && 'высота', r.has.hr && 'пульс', r.has.pw && 'мощность', r.has.cad && 'каденс'].filter(Boolean);
+  const sensors = ['скорость', r.has.ele && 'высота', r.has.hr && 'пульс', r.has.pw && 'мощность', r.has.cad && 'каденс', r.has.temp && 'температура'].filter(Boolean);
   S.toast = `Файл разобран (${r.format}): 1 трек, ${S.pts.length} точек, ${km(M.stats.dist)} км, датчики: ${sensors.join(', ')}`
     + (r.has.time ? '' : ' · в файле нет времени — оно рассчитано для 20 км/ч');
   setUploadMsg('');
@@ -367,6 +367,8 @@ function drawTip() {
       : [g >= 0 ? 'Подъём' : 'Спуск', `${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)} % · ${Math.round(p.ele)} м`]);
   }
   if (p.hr != null) rows.push(['Пульс', Math.round(p.hr) + ' уд/мин']);
+  if (p.cad != null) rows.push(['Каденс', Math.round(p.cad) + ' об/мин']);
+  if (p.temp != null) rows.push(['Температура', Math.round(p.temp) + ' °C']);
   el.replaceChildren(head, ...rows.map(([k, v]) => { const r = node('div', 'tip-row'); r.append(node('span', null, k), node('span', null, v)); return r; }));
   el.hidden = false;
   // Beside the cursor, flipped to the other side near the window edge.
@@ -410,9 +412,10 @@ function drawEmpty() {
 function drawStats() {
   if (last.stats === S.ver) return;
   last.stats = S.ver;
-  const s = M.stats, h = S.has, delta = (s.dist - M.origDist) / 1000;
+  const s = M.stats, h = S.has, delta = (s.dist - M.origDist) / 1000, fs = S.fileSum || {};
   const cells = [
-    ['Дистанция', km(s.dist), S.pts !== S.orig ? (delta >= 0 ? '+' : '') + delta.toFixed(2) + ' км к исходному' : 'км · как в файле'],
+    ['Дистанция', km(s.dist), S.pts !== S.orig ? (delta >= 0 ? '+' : '') + delta.toFixed(2) + ' км к исходному'
+      : fs.distance ? 'км · по устройству ' + km(fs.distance) : 'км · как в файле'],
     ['В движении', fmtDur(s.move), 'общее ' + fmtDur(s.total)],
     h.ele ? ['Набор', Math.round(s.gain) + ' м', 'спуск ' + Math.round(s.loss) + ' м'] : ['Набор', '—', 'нет данных высоты'],
     ['Средняя', s.avg.toFixed(1), 'км/ч · темп ' + pace(s.avg) + '/км'],
@@ -420,7 +423,10 @@ function drawStats() {
     ['Мощность', s.pw != null ? Math.round(s.pw) : '—', s.pw != null ? 'Вт средних' : 'нет датчика'],
     ['Пульс', s.hr != null ? Math.round(s.hr) : '—', s.hr != null ? 'уд/мин средних' : 'нет датчика'],
     ['Каденс', s.cad != null ? Math.round(s.cad) : '—', s.cad != null ? 'об/мин' : 'нет датчика'],
-    ['Калории', s.kcal != null ? Math.round(s.kcal) : '—', s.kcal != null ? 'ккал · по мощности' : 'нужна мощность'],
+    // Power gives the most direct estimate; otherwise the device's own total from the file.
+    s.kcal != null ? ['Калории', Math.round(s.kcal), 'ккал · по мощности']
+      : fs.calories ? ['Калории', Math.round(fs.calories), 'ккал · из файла устройства']
+      : ['Калории', '—', 'нет мощности и итога в файле'],
   ];
   $('stats').replaceChildren(...cells.map(([k, v, n]) => statCell(k, v, n)));
 }
