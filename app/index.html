@@ -96,7 +96,7 @@
             <span class="text-muted">Высота</span><span id="selElev">—</span>
             <span class="text-muted">Пульс</span><span id="selHr">—</span>
           </div>
-          <p class="text-muted small">Потяните по трек-лайну, чтобы выделить промежуток. Esc — снять.</p>
+          <p class="text-muted small">Потяните по трек-лайну, чтобы выделить промежуток; края выделения можно двигать. Esc — снять.</p>
         </div>
 
         <div class="blueprint panel">
@@ -134,6 +134,8 @@
         <g id="gSel" hidden>
           <rect id="selRect" x="0" y="0" width="0" height="176" fill="var(--color-accent-900)" fill-opacity=".13"></rect>
           <path id="selEdges" stroke="var(--color-accent-900)" stroke-width="1.6"></path>
+          <rect id="selGripA" class="sel-grip" x="0" y="74" width="8" height="28"></rect>
+          <rect id="selGripB" class="sel-grip" x="0" y="74" width="8" height="28"></rect>
         </g>
         <path id="hoverRule" stroke="var(--color-accent-900)" stroke-width="1" stroke-dasharray="3 3"></path>
       </svg>

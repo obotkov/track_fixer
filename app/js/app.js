@@ -18,7 +18,9 @@ const S = {
   fileName: '', baseName: '', trackName: '', format: '',
   pts: null, orig: null, has: null, partB: null, partBHas: null,   // pts === null: empty editor, no track yet
   dragFile: false,    // a file is being dragged over the page
-  ver: 0, sel: null, dragging: null, hover: null, draft: [], history: [],
+  ver: 0, sel: null, hover: null, draft: [], history: [],
+  dragging: null,     // chart drag in progress: the fixed end of the selection
+  dragEdge: false,    // ...started by grabbing an edge of an existing selection
   tool: 'cut', dm: 'road', pp: 'stretch', sw: 7,
   ch: { sp: true, hr: true, pw: false },
   toast: '', busy: false, anomIdx: 0,
@@ -126,7 +128,7 @@ function loadTrack(r, fileName) {
   Object.assign(S, {
     fileName, baseName: base, trackName: r.name || base, format: r.format,
     pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null,
-    ver: S.ver + 1, sel: null, dragging: null, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false,
+    ver: S.ver + 1, sel: null, dragging: null, dragEdge: false, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false,
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
   recompute();
@@ -477,6 +479,8 @@ function drawChartOverlay() {
     $('selRect').setAttribute('x', x0.toFixed(1));
     $('selRect').setAttribute('width', Math.max(2, x1 - x0).toFixed(1));
     $('selEdges').setAttribute('d', `M${x0.toFixed(1)} 0V176M${x1.toFixed(1)} 0V176`);
+    $('selGripA').setAttribute('x', (x0 - 4).toFixed(1));
+    $('selGripB').setAttribute('x', (x1 - 4).toFixed(1));
   } else g.setAttribute('hidden', '');
   $('hoverRule').setAttribute('d', S.hover != null ? `M${xOf(S.hover, n).toFixed(1)} 0V176` : '');
   const p = S.hover != null ? S.pts[S.hover] : null;
@@ -749,26 +753,48 @@ function bind() {
     if (f && (!S.pts || confirmDiscard())) openFile(f);
   });
 
-  // Chart: drag to select, hover to inspect.
+  // Chart: drag to select, drag an edge of the selection to adjust it, hover to inspect.
   const chart = $('chart');
+  /** The selection edge under the pointer ('a' | 'b'), within a few pixels, or null. */
+  const edgeAt = e => {
+    const sp = span();
+    if (!sp) return null;
+    const r = chart.getBoundingClientRect(), n = S.pts.length, tol = e.pointerType === 'touch' ? 16 : 7;
+    const px = i => r.left + xOf(i, n) / 1200 * r.width;
+    const da = Math.abs(e.clientX - px(sp.a)), db = Math.abs(e.clientX - px(sp.b));
+    if (Math.min(da, db) > tol) return null;
+    return da <= db ? 'a' : 'b';
+  };
   chart.addEventListener('pointerdown', e => {
     if (e.button !== 0 || !S.pts) return;
     try { chart.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
-    const i = idxAt(e);
-    Object.assign(S, { dragging: i, sel: { a: i, b: i }, hover: i, draft: [], active: null });
+    const edge = edgeAt(e), sp = span();
+    if (edge) {
+      // Grab an edge: the opposite one stays put; the redraw line keeps its points and follows the ends.
+      const fixed = edge === 'a' ? sp.b : sp.a, moving = edge === 'a' ? sp.a : sp.b;
+      Object.assign(S, { dragging: fixed, dragEdge: true, sel: { a: fixed, b: moving }, hover: moving });
+    } else {
+      const i = idxAt(e);
+      Object.assign(S, { dragging: i, dragEdge: false, sel: { a: i, b: i }, hover: i, draft: [], active: null });
+    }
     render();
   });
   chart.addEventListener('pointermove', e => {
     if (!S.pts) return;
     const i = idxAt(e);
     S.hover = i;
-    if (S.dragging != null) S.sel = { a: S.dragging, b: i };
+    if (S.dragging != null) {
+      if (!S.dragEdge || i !== S.dragging) S.sel = { a: S.dragging, b: i }; // an edge never collapses onto the other
+    } else chart.style.cursor = edgeAt(e) ? 'ew-resize' : '';
     render();
   });
   const release = () => {
     if (S.dragging == null) return;
+    const byEdge = S.dragEdge;
     S.dragging = null;
-    if (S.sel && Math.abs(S.sel.a - S.sel.b) < 2) S.sel = null;
+    S.dragEdge = false;
+    // A plain click clears the selection; an adjusted one is kept even if only two points wide.
+    if (!byEdge && S.sel && Math.abs(S.sel.a - S.sel.b) < 2) S.sel = null;
     if (S.tool === 'points' && S.sel && map) map.showRange(S.pts, span(), 18);
     render();
   };
