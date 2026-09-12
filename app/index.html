@@ -106,6 +106,55 @@
       </div>
     </section>
 
+    <section class="blueprint toolbox">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="tools" id="tools"></div>
+      <div class="tool-row">
+        <div class="tool-desc">
+          <span class="tool-title" id="toolTitle"></span>
+          <span class="text-muted tool-hint" id="toolHint"></span>
+        </div>
+
+        <div class="field tool-field" id="fDraw" hidden>
+          <label>Как строить линию</label>
+          <div class="seg">
+            <label class="seg-opt"><input type="radio" name="dm" value="line">По прямой</label>
+            <label class="seg-opt"><input type="radio" name="dm" value="road">По дорогам</label>
+            <label class="seg-opt"><input type="radio" name="dm" value="free">От руки</label>
+          </div>
+        </div>
+
+        <div class="field tool-field" id="fSmooth" hidden>
+          <label>Сила сглаживания</label>
+          <div class="seg">
+            <label class="seg-opt"><input type="radio" name="sw" value="3">Слабо</label>
+            <label class="seg-opt"><input type="radio" name="sw" value="7">Средне</label>
+            <label class="seg-opt"><input type="radio" name="sw" value="15">Сильно</label>
+          </div>
+        </div>
+
+        <div class="field tool-field" id="fPolicy" hidden>
+          <label>Параметры трека</label>
+          <div class="seg">
+            <label class="seg-opt"><input type="radio" name="pp" value="stretch">Растянуть исходные</label>
+            <label class="seg-opt"><input type="radio" name="pp" value="interp">Интерполировать</label>
+          </div>
+        </div>
+
+        <div class="field tool-field" id="fTime" hidden>
+          <label for="startTime">Старт записи</label>
+          <input class="input" type="datetime-local" id="startTime" step="1">
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-secondary" id="btnSecondary" type="button" hidden></button>
+          <button class="btn btn-primary" id="btnPrimary" type="button" disabled></button>
+          <button class="btn btn-secondary" id="btnUndo" type="button" disabled title="Ctrl/⌘ + Z">Отменить</button>
+        </div>
+      </div>
+      <div class="toast" id="toast" aria-live="polite"></div>
+    </section>
+
     <section class="panels" aria-label="Диагностика, выделение и темп">
         <div class="blueprint panel">
           <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
@@ -154,55 +203,6 @@
             </table>
           </div>
         </div>
-    </section>
-
-    <section class="blueprint toolbox">
-      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-      <div class="tools" id="tools"></div>
-      <div class="tool-row">
-        <div class="tool-desc">
-          <span class="tool-title" id="toolTitle"></span>
-          <span class="text-muted tool-hint" id="toolHint"></span>
-        </div>
-
-        <div class="field tool-field" id="fDraw" hidden>
-          <label>Как строить линию</label>
-          <div class="seg">
-            <label class="seg-opt"><input type="radio" name="dm" value="line">По прямой</label>
-            <label class="seg-opt"><input type="radio" name="dm" value="road">По дорогам</label>
-            <label class="seg-opt"><input type="radio" name="dm" value="free">От руки</label>
-          </div>
-        </div>
-
-        <div class="field tool-field" id="fSmooth" hidden>
-          <label>Сила сглаживания</label>
-          <div class="seg">
-            <label class="seg-opt"><input type="radio" name="sw" value="3">Слабо</label>
-            <label class="seg-opt"><input type="radio" name="sw" value="7">Средне</label>
-            <label class="seg-opt"><input type="radio" name="sw" value="15">Сильно</label>
-          </div>
-        </div>
-
-        <div class="field tool-field" id="fPolicy" hidden>
-          <label>Параметры трека</label>
-          <div class="seg">
-            <label class="seg-opt"><input type="radio" name="pp" value="stretch">Растянуть исходные</label>
-            <label class="seg-opt"><input type="radio" name="pp" value="interp">Интерполировать</label>
-          </div>
-        </div>
-
-        <div class="field tool-field" id="fTime" hidden>
-          <label for="startTime">Старт записи</label>
-          <input class="input" type="datetime-local" id="startTime" step="1">
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-secondary" id="btnSecondary" type="button" hidden></button>
-          <button class="btn btn-primary" id="btnPrimary" type="button" disabled></button>
-          <button class="btn btn-secondary" id="btnUndo" type="button" disabled title="Ctrl/⌘ + Z">Отменить</button>
-        </div>
-      </div>
-      <div class="toast" id="toast" aria-live="polite"></div>
     </section>
   </main>
 

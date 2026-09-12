@@ -852,6 +852,8 @@ function bind() {
   chart.addEventListener('pointerup', release);
   chart.addEventListener('pointercancel', release);
   chart.addEventListener('pointerleave', () => { if (S.dragging == null) { S.hover = null; tip = null; render(); } });
+  // The summary is pinned to the viewport; once the page scrolls the track is no longer under it.
+  window.addEventListener('scroll', () => { if (tip) { tip = null; render(); } }, { passive: true });
 
   for (const [k, id] of [['sp', 'chSp'], ['hr', 'chHr'], ['pw', 'chPw']]) {
     $(id).addEventListener('change', e => { S.ch = { ...S.ch, [k]: e.target.checked }; render(); });
