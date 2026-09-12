@@ -53,6 +53,9 @@ a:hover { color: var(--color-accent-700); }
 .panel h6 { margin: 0; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .btn-sm { padding: 2px 8px; font-size: 12px; }
+.anom-nav { display: flex; align-items: center; gap: var(--space-2); }
+.anom-nav .btn-icon { width: 30px; height: 30px; flex: none; }
+.anom-count { flex: 1; text-align: center; font-size: 13px; }
 
 /* — outlier detection settings — */
 .dialog-backdrop { z-index: 2000; }

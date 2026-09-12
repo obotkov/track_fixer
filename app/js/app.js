@@ -300,11 +300,12 @@ function selectRun(k) {
   render();
 }
 
-function selectAnomaly() {
-  const an = M.anoms;
-  if (!an.length) return;
-  const cur = an[S.anomIdx], sp = span();
-  selectRun(sp && sp.a === cur.a && sp.b === cur.b && an.length > 1 ? (S.anomIdx + 1) % an.length : S.anomIdx);
+const selectAnomaly = () => selectRun(S.anomIdx);
+
+/** Diagnostics arrows: select the previous (-1) or next (+1) detected stretch, wrapping around. */
+function stepAnomaly(dir) {
+  const n = M.anoms.length;
+  if (n) selectRun((S.anomIdx + dir + n) % n);
 }
 
 /* ───────────── drawing ───────────── */
@@ -400,9 +401,10 @@ function drawDiag() {
     return;
   }
   const cur = an[S.anomIdx];
-  $('anomalyText').textContent = (an.length > 1 ? `Найдено участков: ${an.length}. ` : '') + describe(cur);
+  $('anomCount').textContent = `Участок ${S.anomIdx + 1} из ${an.length}`;
+  $('btnAnomPrev').disabled = $('btnAnomNext').disabled = an.length < 2;
+  $('anomalyText').textContent = describe(cur);
   $('anomalyRange').textContent = `с ${km(D.d[cur.a])} км по ${km(D.d[cur.b])} км`;
-  $('btnSelectAnomaly').textContent = an.length > 1 ? `Выделить участок ${S.anomIdx + 1}/${an.length}` : 'Выделить участок';
 }
 
 function drawSelection() {
@@ -826,6 +828,8 @@ function bind() {
   $('btnSecondary').addEventListener('click', () => { const c = toolCfg(); if (c.sec && !c.secOff && !S.busy) c.secRun(); });
   $('btnUndo').addEventListener('click', undo);
   $('btnSelectAnomaly').addEventListener('click', selectAnomaly);
+  $('btnAnomPrev').addEventListener('click', () => stepAnomaly(-1));
+  $('btnAnomNext').addEventListener('click', () => stepAnomaly(1));
   bindConfig();
 
   document.addEventListener('keydown', e => {
