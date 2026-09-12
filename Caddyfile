@@ -13,9 +13,12 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.de; connect-src 'self' https://routing.openstreetmap.de https://api.open-meteo.com https://api.open-elevation.com; frame-ancestors 'none'; base-uri 'self'"
 		-Server
 	}
-	@assets path /css/* /js/* /vendor/* /favicon.svg
-	header @assets Cache-Control "public, max-age=3600"
-	header / Cache-Control "no-cache"
+	# App code is revalidated on every load (cheap 304 via ETag) so a deploy never mixes old and new
+	# ES modules; the pinned Leaflet build can be cached for a day.
+	@vendor path /vendor/* /favicon.svg
+	header @vendor Cache-Control "public, max-age=86400"
+	@app path / /index.html /css/* /js/*
+	header @app Cache-Control "no-cache"
 }
 
 {$SITE_DOMAIN:wild-loop.ru} {

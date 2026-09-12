@@ -478,7 +478,7 @@ function drawMap() {
   if (!map) return;
   const sp = span(), sk = sp ? sp.a + ':' + sp.b : '-';
   const baseKey = S.ver + '|' + (S.partB ? S.partB.length : 0);
-  if (last.base !== baseKey) { last.base = baseKey; map.setBase({ pts: S.pts, orig: S.orig, partB: S.partB, ghost: S.pts !== S.orig }); }
+  if (last.base !== baseKey) { last.base = baseKey; map.setBase({ pts: S.pts, orig: S.orig, partB: S.partB, ghost: S.pts !== S.orig, gaps: M.anoms }); }
   const selKey = S.ver + '|' + sk;
   if (last.sel !== selKey) { last.sel = selKey; map.setSel(S.pts, sp); }
   const draftKey = selKey + '|' + S.draft.length + '|' + S.dm;
@@ -498,7 +498,8 @@ function drawMap() {
   $('mapHint').textContent = S.tool === 'redraw'
     ? (sp ? (S.dm === 'free' ? 'Тяните по карте, чтобы нарисовать линию' : 'Кликайте по карте — точки новой линии') : 'Выделите промежуток на трек-лайне')
     : S.tool === 'points' ? 'Тяните точки · «+» или клик у линии — добавить · двойной клик — удалить · стрелки — сдвиг'
-    : S.pts !== S.orig ? 'Пунктир — исходная геометрия, сплошная — текущая' : 'Сплошная — трек из файла · квадрат — старт, круг — финиш';
+    : (S.pts !== S.orig ? 'Пунктир — исходная геометрия, сплошная — текущая' : 'Сплошная — трек из файла · квадрат — старт, круг — финиш')
+      + (M.anoms.length ? ` · точки — разрывы сигнала (${M.anoms.length})` : '');
   if (needFit) { needFit = false; requestAnimationFrame(() => map.fit(S.pts)); }
 }
 

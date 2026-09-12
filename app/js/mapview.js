@@ -7,7 +7,8 @@ export class MapView {
     const L = window.L;
     this.L = L;
     this.el = el;
-    this.map = L.map(el, { zoomControl: true, preferCanvas: true, center: [55.76, 37.62], zoom: 11 });
+    // Fractional zoom lets fitBounds fill the frame instead of stopping a whole level short.
+    this.map = L.map(el, { zoomControl: true, preferCanvas: true, zoomSnap: 0.25, center: [55.76, 37.62], zoom: 11 });
     L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
@@ -41,12 +42,22 @@ export class MapView {
       html: '<div class="tf-sq' + (dark ? ' is-dark' : '') + (draggable ? ' is-drag' : '') + '"></div>' });
   }
 
-  setBase({ pts, orig, partB, ghost }) {
+  setBase({ pts, orig, partB, ghost, gaps = [] }) {
     const L = this.L, g = this.base, off = { interactive: false };
     g.clearLayers();
     if (ghost) L.polyline(orig.map(ll), { ...off, color: C.ghost, weight: 2, dashArray: '5 5' }).addTo(g);
     if (partB) L.polyline(partB.map(ll), { ...off, color: C.partB, weight: 3, dashArray: '2 5' }).addTo(g);
-    L.polyline(pts.map(ll), { ...off, color: C.track, weight: 4 }).addTo(g);
+    // Glitch runs (signal loss, teleports) are dotted so the straight chords don't read as ridden route.
+    const solid = [], dotted = [];
+    let start = 0;
+    for (const r of gaps) {
+      if (r.a > start) solid.push(pts.slice(start, r.a + 1).map(ll));
+      dotted.push(pts.slice(r.a, r.b + 1).map(ll));
+      start = r.b;
+    }
+    solid.push(pts.slice(start).map(ll));
+    L.polyline(solid, { ...off, color: C.track, weight: 4 }).addTo(g);
+    if (dotted.length) L.polyline(dotted, { ...off, color: C.dark, weight: 3, dashArray: '1 7', lineCap: 'round' }).addTo(g);
     // Edited stretches are drawn darker, joined to their neighbours.
     const runs = [];
     let run = null;
