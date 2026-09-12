@@ -27,6 +27,7 @@ const S = {
   active: null,       // point index picked in the points tool
 };
 let D = null, map = null, needFit = false, freeDrawing = false, EM = null;
+let tip = null;   // cursor position for the hover mini summary: { x, y, src: 'map' | 'chart' }
 const MAX_VERTS = 300; // editable markers shown at once; beyond that every k-th point
 const M = { stats: null, anoms: [], pauses: [], splits: [], origDist: 0 };
 const last = {};
@@ -340,6 +341,38 @@ function draw() {
   drawTools();
   drawMap();
   drawHover();
+  drawTip();
+}
+
+/** Grade in % around point i over ±half metres of track (smooths barometer noise); null if too short. */
+function gradeAt(i, half = 25) {
+  const d = D.d, n = D.n;
+  let a = i, b = i;
+  while (a > 0 && d[i] - d[a] < half && i - a < 500) a--;
+  while (b < n - 1 && d[b] - d[i] < half && b - i < 500) b++;
+  const run = d[b] - d[a];
+  return run < 10 ? null : (S.pts[b].ele - S.pts[a].ele) / run * 100;
+}
+
+/** Mini summary next to the cursor: where on the track, speed, climb and heart rate if recorded. */
+function drawTip() {
+  const el = $('hoverTip'), i = S.hover, p = tip && i != null ? S.pts[i] : null;
+  if (!p) { el.hidden = true; return; }
+  const head = node('div', 'tip-head');
+  head.append(node('span', null, km(D.d[i]) + ' км'), node('span', null, S.has.time ? clock(p.t) : ''));
+  const rows = [['Скорость', Number.isFinite(D.sp[i]) ? D.sp[i].toFixed(1) + ' км/ч' : '—']];
+  if (S.has.ele) {
+    const g = gradeAt(i);
+    rows.push(g == null ? ['Высота', Math.round(p.ele) + ' м']
+      : [g >= 0 ? 'Подъём' : 'Спуск', `${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)} % · ${Math.round(p.ele)} м`]);
+  }
+  if (p.hr != null) rows.push(['Пульс', Math.round(p.hr) + ' уд/мин']);
+  el.replaceChildren(head, ...rows.map(([k, v]) => { const r = node('div', 'tip-row'); r.append(node('span', null, k), node('span', null, v)); return r; }));
+  el.hidden = false;
+  // Beside the cursor, flipped to the other side near the window edge.
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = (tip.x + 16 + w > innerWidth ? tip.x - 16 - w : tip.x + 16) + 'px';
+  el.style.top = (tip.y + 16 + h > innerHeight ? tip.y - 16 - h : tip.y + 16) + 'px';
 }
 
 function statCell(k, v, n) {
@@ -723,6 +756,21 @@ const mapHandlers = {
     freeDrawing = false;
     toast(`Нарисовано ${S.draft.length} точек · нажмите «Заменить геометрию»`);
   },
+  // Pointer over the map: snap to the nearest track point and show the mini summary.
+  hover(e) {
+    if (!S.pts || freeDrawing || S.dragging != null) return;
+    const i = map.nearest(S.pts, e.latlng, 18);
+    if (i == null) { this.leave(); return; }
+    S.hover = i;
+    tip = { x: e.originalEvent.clientX, y: e.originalEvent.clientY, src: 'map' };
+    render();
+  },
+  leave() {
+    if (!tip || tip.src !== 'map') return;
+    tip = null;
+    S.hover = null;
+    render();
+  },
 };
 
 function idxAt(e) {
@@ -785,6 +833,7 @@ function bind() {
     if (!S.pts) return;
     const i = idxAt(e);
     S.hover = i;
+    tip = { x: e.clientX, y: e.clientY, src: 'chart' };
     if (S.dragging != null) {
       if (!S.dragEdge || i !== S.dragging) S.sel = { a: S.dragging, b: i }; // an edge never collapses onto the other
     } else chart.style.cursor = edgeAt(e) ? 'ew-resize' : '';
@@ -802,7 +851,7 @@ function bind() {
   };
   chart.addEventListener('pointerup', release);
   chart.addEventListener('pointercancel', release);
-  chart.addEventListener('pointerleave', () => { if (S.dragging == null) { S.hover = null; render(); } });
+  chart.addEventListener('pointerleave', () => { if (S.dragging == null) { S.hover = null; tip = null; render(); } });
 
   for (const [k, id] of [['sp', 'chSp'], ['hr', 'chHr'], ['pw', 'chPw']]) {
     $(id).addEventListener('change', e => { S.ch = { ...S.ch, [k]: e.target.checked }; render(); });

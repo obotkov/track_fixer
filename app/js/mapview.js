@@ -28,7 +28,8 @@ export class MapView {
 
     this.map.on('click', e => handlers.click(e.latlng));
     this.map.on('mousedown', e => { if (e.originalEvent.button === 0) handlers.down(e.latlng); });
-    this.map.on('mousemove', e => handlers.move(e.latlng));
+    this.map.on('mousemove', e => { handlers.move(e.latlng); handlers.hover(e); });
+    this.map.on('mouseout', () => handlers.leave());
     this.map.on('mouseup', () => handlers.up());
     window.addEventListener('mouseup', () => handlers.up());
     if (window.ResizeObserver) new ResizeObserver(() => this.map.invalidateSize()).observe(el);
@@ -172,6 +173,26 @@ export class MapView {
       if (el) el.classList.toggle('is-active', j === i);
       m.setZIndexOffset(j === i ? 1000 : 0);
     }
+  }
+
+  /**
+   * Index of the track point nearest to latlng if it is within maxPx on screen, else null.
+   * Pixel positions are projected once per track array and zoom level, then scanned linearly.
+   */
+  nearest(pts, latlng, maxPx) {
+    const z = this.map.getZoom();
+    if (!this.proj || this.proj.pts !== pts || this.proj.z !== z) {
+      const xy = new Float64Array(pts.length * 2);
+      for (let i = 0; i < pts.length; i++) { const q = this.map.project([pts[i].lat, pts[i].lng], z); xy[2 * i] = q.x; xy[2 * i + 1] = q.y; }
+      this.proj = { pts, z, xy };
+    }
+    const m = this.map.project(latlng, z), xy = this.proj.xy;
+    let best = -1, bd = maxPx * maxPx;
+    for (let i = 0; i < pts.length; i++) {
+      const dx = xy[2 * i] - m.x, dy = xy[2 * i + 1] - m.y, d = dx * dx + dy * dy;
+      if (d <= bd) { bd = d; best = i; }
+    }
+    return best < 0 ? null : best;
   }
 
   pxDistance(a, b) {
