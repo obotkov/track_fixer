@@ -14,8 +14,9 @@ import { MapView } from './mapview.js';
 const $ = id => document.getElementById(id);
 
 const S = {
-  screen: 'upload', fileName: '', baseName: '', trackName: '', format: '',
-  pts: null, orig: null, has: null, partB: null, partBHas: null,
+  fileName: '', baseName: '', trackName: '', format: '',
+  pts: null, orig: null, has: null, partB: null, partBHas: null,   // pts === null: empty editor, no track yet
+  dragFile: false,    // a file is being dragged over the page
   ver: 0, sel: null, dragging: null, hover: null, draft: [], history: [],
   tool: 'cut', dm: 'road', pp: 'stretch', sw: 7,
   ch: { sp: true, hr: true, pw: false },
@@ -103,15 +104,15 @@ async function openFile(file) {
   if (!file) return;
   const dz = $('dropzone');
   dz.classList.add('is-busy');
-  setUploadMsg('Читаю ' + file.name + '…');
+  if (S.pts) toast('Читаю ' + file.name + '…'); else setUploadMsg('Читаю ' + file.name + '…');
   try {
     const r = await parseTrackFile(file);
     loadTrack(r, file.name);
   } catch (e) {
     console.error(e);
-    S.screen = 'upload';
-    setUploadMsg(file.name + ': ' + (e.message || 'не удалось прочитать файл'), true);
-    render();
+    // A file that fails to parse leaves the open track as it is.
+    const msg = file.name + ': ' + (e.message || 'не удалось прочитать файл');
+    if (S.pts) toast(msg); else { setUploadMsg(msg, true); render(); }
   } finally {
     dz.classList.remove('is-busy');
   }
@@ -119,10 +120,12 @@ async function openFile(file) {
 
 function loadTrack(r, fileName) {
   const base = fileName.replace(/\.(gpx|fit|tcx)$/i, '');
+  // ver keeps growing across files: stats, splits, chart and map are memoised by it, and restarting
+  // at 0 made a freshly opened file hit the previous track's cache and leave it on screen.
   Object.assign(S, {
-    screen: 'editor', fileName, baseName: base, trackName: r.name || base, format: r.format,
+    fileName, baseName: base, trackName: r.name || base, format: r.format,
     pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null,
-    ver: 0, sel: null, dragging: null, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null,
+    ver: S.ver + 1, sel: null, dragging: null, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false,
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
   recompute();
@@ -306,14 +309,18 @@ function node(tag, cls, text) {
 const corners = el => ['tl', 'tr', 'bl', 'br'].forEach(c => el.append(node('i', 'corner ' + c)));
 
 function draw() {
-  $('screenUpload').hidden = S.screen !== 'upload';
-  $('screenEditor').hidden = S.screen !== 'editor';
-  $('fileName').textContent = S.screen === 'editor' ? S.fileName : 'файл не выбран';
-  $('fileName').title = S.screen === 'editor' ? S.fileName : '';
-  $('btnExport').disabled = S.screen !== 'editor' || S.busy;
-  if (S.screen !== 'editor') return;
-
+  const loaded = !!S.pts;
+  $('fileName').textContent = loaded ? S.fileName : 'файл не выбран';
+  $('fileName').title = loaded ? S.fileName : '';
+  $('btnOther').textContent = loaded ? 'Другой файл' : 'Открыть файл';
+  $('btnExport').disabled = !loaded || S.busy;
+  $('mapEmpty').hidden = loaded && !S.dragFile;
+  $('dropzone').classList.toggle('is-drag', S.dragFile);
+  $('dzTitle').textContent = loaded ? 'Отпустите файл — откроется новый трек' : 'Перетащите файл трека сюда';
+  $('toast').textContent = S.toast;
   if (!map && window.L) map = new MapView($('map'), mapHandlers);
+  if (!loaded) { drawEmpty(); return; }
+
   drawStats();
   drawDiag();
   drawSelection();
@@ -323,7 +330,38 @@ function draw() {
   drawTools();
   drawMap();
   drawHover();
-  $('toast').textContent = S.toast;
+}
+
+function statCell(k, v, n) {
+  const c = node('div', 'blueprint stat');
+  corners(c);
+  c.append(node('span', 'stat-k', k), node('span', 'stat-v', String(v)), node('span', 'text-muted stat-n', n));
+  return c;
+}
+
+/** The editor before any file: every block in place, values blank, tools off. */
+function drawEmpty() {
+  if (last.stats === 'empty') return;
+  last.stats = last.splits = last.chart = 'empty';
+  const cells = [['Дистанция', 'км'], ['В движении', 'общее —'], ['Набор', 'спуск —'], ['Средняя', 'км/ч'], ['Максимум', 'км/ч'],
+    ['Мощность', 'Вт средних'], ['Пульс', 'уд/мин средних'], ['Каденс', 'об/мин'], ['Калории', 'ккал']];
+  $('stats').replaceChildren(...cells.map(([k, n]) => statCell(k, '—', n)));
+  const tr = node('tr'), td = node('td', 'empty', 'нет данных');
+  td.colSpan = 4; tr.append(td);
+  $('splits').replaceChildren(tr);
+  ['pElevArea', 'pElevLine', 'pSpeed', 'pHr', 'pPw', 'hoverRule'].forEach(id => $(id).setAttribute('d', ''));
+  setBands($('gAnom'), []);
+  setBands($('gPause'), []);
+  $('gSel').setAttribute('hidden', '');
+  for (const [id, opt] of [['chSp', 'optSp'], ['chHr', 'optHr'], ['chPw', 'optPw']]) { $(id).disabled = true; $(opt).classList.add('is-off'); }
+  for (const b of $('tools').children) { b.disabled = true; b.className = 'btn ' + (b.dataset.tool === 'cut' ? 'btn-primary' : 'btn-secondary'); }
+  $('toolTitle').textContent = 'Инструменты правки';
+  $('toolHint').textContent = 'Откройте трек, выделите промежуток на трек-лайне и выберите инструмент.';
+  ['fDraw', 'fSmooth', 'fPolicy', 'fTime'].forEach(id => { $(id).hidden = true; });
+  $('btnPrimary').textContent = 'Вырезать выделение';
+  $('btnPrimary').disabled = true;
+  $('btnSecondary').hidden = true;
+  $('btnUndo').disabled = true;
 }
 
 function drawStats() {
@@ -341,12 +379,7 @@ function drawStats() {
     ['Каденс', s.cad != null ? Math.round(s.cad) : '—', s.cad != null ? 'об/мин' : 'нет датчика'],
     ['Калории', s.kcal != null ? Math.round(s.kcal) : '—', s.kcal != null ? 'ккал · по мощности' : 'нужна мощность'],
   ];
-  $('stats').replaceChildren(...cells.map(([k, v, n]) => {
-    const c = node('div', 'blueprint stat');
-    corners(c);
-    c.append(node('span', 'stat-k', k), node('span', 'stat-v', String(v)), node('span', 'text-muted stat-n', n));
-    return c;
-  }));
+  $('stats').replaceChildren(...cells.map(([k, v, n]) => statCell(k, v, n)));
 }
 
 function drawDiag() {
@@ -452,7 +485,7 @@ function drawChartOverlay() {
 let cfg = null;
 function drawTools() {
   cfg = toolCfg();
-  for (const b of $('tools').children) b.className = 'btn ' + (b.dataset.tool === S.tool ? 'btn-primary' : 'btn-secondary');
+  for (const b of $('tools').children) { b.disabled = false; b.className = 'btn ' + (b.dataset.tool === S.tool ? 'btn-primary' : 'btn-secondary'); }
   $('toolTitle').textContent = cfg.title;
   $('toolHint').textContent = cfg.hint;
   $('fDraw').hidden = !cfg.draw;
@@ -586,7 +619,7 @@ function nudge(north, east, meters) {
 
 const mapHandlers = {
   click(ll) {
-    if (S.busy || S.screen !== 'editor') return;
+    if (S.busy || !S.pts) return;
     const p = { lat: ll.lat, lng: ll.lng }, sp = span();
     if (S.tool === 'redraw' && S.dm !== 'free' && sp) {
       S.draft = S.draft.concat([p]);
@@ -627,24 +660,26 @@ function idxAt(e) {
 
 function bind() {
   const input = $('fileInput'), dz = $('dropzone');
-  const pick = () => { if (S.screen !== 'editor' || confirmDiscard()) input.click(); };
-  dz.addEventListener('click', () => input.click());
-  dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  const pick = () => { if (!S.pts || confirmDiscard()) input.click(); };
+  dz.addEventListener('click', pick);
+  dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
   input.addEventListener('change', () => { const f = input.files[0]; input.value = ''; openFile(f); });
   $('fileInput2').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; openSecondFile(f); });
   $('btnDemo').addEventListener('click', loadDemo);
   $('btnOther').addEventListener('click', pick);
   $('btnExport').addEventListener('click', () => exportGPX(S.pts, S.has, '_fixed'));
 
-  // Drop anywhere on the page.
+  // Drop a file anywhere on the page; while it is dragged, the map shows the drop target.
   let depth = 0;
-  window.addEventListener('dragenter', e => { e.preventDefault(); depth++; dz.classList.add('is-drag'); });
-  window.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; dz.classList.remove('is-drag'); } });
+  const isFile = e => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  const setDrag = on => { if (S.dragFile !== on) { S.dragFile = on; render(); } };
+  window.addEventListener('dragenter', e => { if (!isFile(e)) return; e.preventDefault(); depth++; setDrag(true); });
+  window.addEventListener('dragleave', e => { if (!isFile(e)) return; if (--depth <= 0) { depth = 0; setDrag(false); } });
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => {
-    e.preventDefault(); depth = 0; dz.classList.remove('is-drag');
+    e.preventDefault(); depth = 0; setDrag(false);
     const f = e.dataTransfer && e.dataTransfer.files[0];
-    if (f && (S.screen !== 'editor' || confirmDiscard())) openFile(f);
+    if (f && (!S.pts || confirmDiscard())) openFile(f);
   });
 
   // Chart: drag to select, hover to inspect.
@@ -700,7 +735,7 @@ function bind() {
   $('btnSelectAnomaly').addEventListener('click', selectAnomaly);
 
   document.addEventListener('keydown', e => {
-    if (S.screen !== 'editor' || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
+    if (!S.pts || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
     if (S.tool === 'points' && S.active != null && !S.busy) {
       const dir = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
       if (dir) { e.preventDefault(); nudge(dir[0], dir[1], e.shiftKey ? 10 : 1); return; }

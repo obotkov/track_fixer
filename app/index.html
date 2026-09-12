@@ -20,7 +20,7 @@
     <span class="text-muted subtitle">Редактор геометрии велотрека</span>
     <div class="topbar-actions">
       <span class="tag tag-neutral" id="fileName">файл не выбран</span>
-      <button class="btn btn-secondary" id="btnOther" type="button">Другой файл</button>
+      <button class="btn btn-secondary" id="btnOther" type="button">Открыть файл</button>
       <button class="btn btn-primary" id="btnExport" type="button" disabled>Экспорт</button>
     </div>
   </header>
@@ -28,65 +28,44 @@
   <input type="file" id="fileInput" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden>
   <input type="file" id="fileInput2" accept=".gpx,.fit,.tcx,application/gpx+xml" hidden>
 
-  <!-- ─────────────── upload ─────────────── -->
-  <main id="screenUpload" class="upload">
-    <div class="upload-inner">
-      <div>
-        <h1>Загрузите файл трека</h1>
-        <p class="text-muted lead">Запись читается целиком: геометрия, время, высота, скорость, пульс, мощность и каденс. Исправление маршрута не затрагивает остальные параметры.</p>
-      </div>
-
-      <div class="blueprint dropzone" id="dropzone" role="button" tabindex="0" aria-label="Выбрать файл трека">
-        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 16V4m0 0L8 8m4-4 4 4"></path>
-          <path d="M3 15v3a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-3"></path>
-        </svg>
-        <div>
-          <div class="dz-title" id="dzTitle">Перетащите файл сюда</div>
-          <div class="text-muted dz-sub">или нажмите, чтобы выбрать на диске</div>
-        </div>
-        <div class="dz-tags">
-          <span class="tag tag-outline">.GPX</span>
-          <span class="tag tag-outline">.FIT</span>
-          <span class="tag tag-outline">.TCX</span>
-        </div>
-        <span class="text-muted dz-note">до 40 МБ · обработка в браузере, файл не покидает устройство</span>
-      </div>
-
-      <div class="upload-status">
-        <span class="msg text-muted" id="uploadMsg" aria-live="polite">Нет файла под рукой — откройте демо-трек с типичными ошибками записи.</span>
-        <button class="btn btn-secondary" id="btnDemo" type="button">Открыть демо-трек</button>
-      </div>
-
-      <div class="steps">
-        <div class="step">
-          <span class="kicker">01 / Анализ</span>
-          <span class="step-text">Статистика, карта и трек-лайн с высотой, скоростью, пульсом и мощностью.</span>
-        </div>
-        <div class="step">
-          <span class="kicker">02 / Выделение</span>
-          <span class="step-text">Промежуток тянется по трек-лайну, инструменты работают по нему.</span>
-        </div>
-        <div class="step">
-          <span class="kicker">03 / Правка</span>
-          <span class="step-text">Вырезать, перерисовать по карте, сгладить, пересчитать высоту, склеить.</span>
-        </div>
-      </div>
-    </div>
-  </main>
-
-  <!-- ─────────────── editor ─────────────── -->
-  <main id="screenEditor" class="editor" hidden>
+  <main id="screenEditor" class="editor">
 
     <section class="stats" id="stats" aria-label="Статистика"></section>
 
     <section class="workspace">
       <figure class="blueprint mapfig">
         <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-        <div id="map"></div>
+        <div class="map-wrap">
+          <div id="map"></div>
+          <!-- Empty state and drop target: shown until a track is open, and again while a file is dragged over the page. -->
+          <div class="map-empty" id="mapEmpty">
+            <div class="map-empty-inner">
+              <div class="blueprint dropzone" id="dropzone" role="button" tabindex="0" aria-label="Выбрать файл трека">
+                <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 16V4m0 0L8 8m4-4 4 4"></path>
+                  <path d="M3 15v3a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-3"></path>
+                </svg>
+                <div>
+                  <div class="dz-title" id="dzTitle">Перетащите файл трека сюда</div>
+                  <div class="text-muted dz-sub">или нажмите, чтобы выбрать на диске</div>
+                </div>
+                <div class="dz-tags">
+                  <span class="tag tag-outline">.GPX</span>
+                  <span class="tag tag-outline">.FIT</span>
+                  <span class="tag tag-outline">.TCX</span>
+                </div>
+                <span class="text-muted dz-note">до 40 МБ · обработка в браузере, файл не покидает устройство</span>
+              </div>
+              <div class="upload-status">
+                <span class="msg text-muted" id="uploadMsg" aria-live="polite">Нет файла под рукой — откройте демо-трек с типичными ошибками записи.</span>
+                <button class="btn btn-secondary" id="btnDemo" type="button">Открыть демо-трек</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <figcaption>
-          <span id="mapHint"></span>
+          <span id="mapHint">Маршрут появится на карте после загрузки трека</span>
           <span class="hover" id="hoverLabel">наведите на трек-лайн</span>
         </figcaption>
       </figure>
@@ -100,7 +79,7 @@
             <span class="text-muted small" id="anomalyRange"></span>
             <button class="btn btn-secondary" id="btnSelectAnomaly" type="button">Выделить участок</button>
           </div>
-          <span class="panel-text" id="cleanText" hidden></span>
+          <span class="panel-text" id="cleanText">Откройте трек — здесь появятся найденные сбои GPS и паузы.</span>
         </div>
 
         <div class="blueprint panel">
@@ -157,9 +136,9 @@
       </svg>
       <div class="axis">
         <span>0 км</span>
-        <span id="axisElev"></span>
+        <span id="axisElev">высота —</span>
         <span id="axisMid"></span>
-        <span id="axisEnd"></span>
+        <span id="axisEnd">— км</span>
       </div>
     </section>
 
@@ -205,7 +184,7 @@
 
         <div class="actions">
           <button class="btn btn-secondary" id="btnSecondary" type="button" hidden></button>
-          <button class="btn btn-primary" id="btnPrimary" type="button"></button>
+          <button class="btn btn-primary" id="btnPrimary" type="button" disabled></button>
           <button class="btn btn-secondary" id="btnUndo" type="button" disabled title="Ctrl/⌘ + Z">Отменить</button>
         </div>
       </div>
