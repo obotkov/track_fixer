@@ -1,0 +1,32 @@
+# TrackFix — static site behind Caddy.
+# HTTPS for $SITE_DOMAIN is obtained automatically (Let's Encrypt / ZeroSSL) as soon as
+# the domain's A record points at this server; until then the site is served over plain HTTP by IP.
+
+(site) {
+	root * /srv
+	encode zstd gzip
+	file_server
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://tile.openstreetmap.de; connect-src 'self' https://routing.openstreetmap.de https://api.open-meteo.com https://api.open-elevation.com; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+	@assets path /css/* /js/* /vendor/* /favicon.svg
+	header @assets Cache-Control "public, max-age=3600"
+	header / Cache-Control "no-cache"
+}
+
+{$SITE_DOMAIN:wild-loop.ru} {
+	import site
+}
+
+www.{$SITE_DOMAIN:wild-loop.ru} {
+	redir https://{$SITE_DOMAIN:wild-loop.ru}{uri} permanent
+}
+
+# Any other host (e.g. the bare IP) — plain HTTP.
+:80 {
+	import site
+}

@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/industry-b2aad1fc-e39b-4862-9e8c-bb5a4bafc167/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="_ds/industry-b2aad1fc-e39b-4862-9e8c-bb5a4bafc167/_ds_bundle.js"></script>
+  <template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#1d2d3d"/><path d="M60 140 L80 90 L108 118 L140 62" fill="none" stroke="#b5d9fd" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="140" cy="62" r="11" fill="#f2f2f3"/></svg></template>
+  <style>
+    body{margin:0;background:var(--color-bg)}
+    a{color:var(--color-accent)}a:hover{color:var(--color-accent-700)}
+    .leaflet-container{background:var(--color-surface);font-family:var(--font-body)}
+    .leaflet-bar a,.leaflet-control-attribution{border-radius:0!important;color:var(--color-text)}
+  </style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:var(--color-bg);color:var(--color-text)">
+
+  <header class="nav" style="padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-divider);gap:var(--space-4);flex-wrap:wrap">
+    <span class="nav-brand" style="letter-spacing:.04em;margin-right:var(--space-2)">TRACKFIX<span style="color:var(--color-accent)">/</span>GPX</span>
+    <span class="text-muted" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Редактор геометрии велотрека</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">
+      <span class="tag tag-neutral" style="font-family:var(--font-body)">{{ fileName }}</span>
+      <button class="btn btn-secondary" onClick="{{ reset }}">Другой файл</button>
+      <button class="btn btn-primary" onClick="{{ exportFile }}">Экспорт</button>
+    </div>
+  </header>
+
+  <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ true }}">
+    <main style="flex:1;display:grid;place-items:center;padding:var(--space-8) var(--space-4)">
+      <div style="width:100%;max-width:760px;display:flex;flex-direction:column;gap:var(--space-6)">
+        <div>
+          <h1 style="margin:0 0 var(--space-2)">Загрузите файл трека</h1>
+          <p class="text-muted" style="max-width:54ch;margin:0">Запись читается целиком: геометрия, время, высота, скорость, пульс, мощность и каденс. Исправление маршрута не затрагивает остальные параметры.</p>
+        </div>
+
+        <div class="blueprint" onClick="{{ load }}" style="padding:var(--space-8) var(--space-4);display:flex;flex-direction:column;align-items:center;gap:var(--space-4);cursor:pointer;background:var(--color-surface)" style-hover="background:var(--color-accent-100)">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 16V4m0 0L8 8m4-4 4 4"></path>
+            <path d="M3 15v3a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-3"></path>
+          </svg>
+          <div style="text-align:center">
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:22px">Перетащите файл сюда</div>
+            <div class="text-muted" style="font-size:13px">или нажмите, чтобы выбрать на диске</div>
+          </div>
+          <div style="display:flex;gap:var(--space-2)">
+            <span class="tag tag-outline">.GPX</span>
+            <span class="tag tag-outline">.FIT</span>
+            <span class="tag tag-outline">.TCX</span>
+          </div>
+          <span class="text-muted" style="font-size:11px;text-align:center">до 40 МБ · обработка в браузере, файл не покидает устройство</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--space-4)">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent)">01 / Анализ</span>
+            <span style="font-size:13px">Статистика, карта и трек-лайн с высотой, скоростью, пульсом и мощностью.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent)">02 / Выделение</span>
+            <span style="font-size:13px">Промежуток тянется по трек-лайну, инструменты работают по нему.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent)">03 / Правка</span>
+            <span style="font-size:13px">Вырезать, перерисовать по карте, сгладить, пересчитать высоту, склеить.</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{ isEditor }}">
+    <main style="flex:1;display:flex;flex-direction:column;gap:var(--space-4);padding:var(--space-4);max-width:1680px;width:100%;margin:0 auto;box-sizing:border-box">
+
+      <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:var(--space-3)">
+        <sc-for list="{{ statCells }}" as="cell" hint-placeholder-count="9">
+          <div class="blueprint" style="padding:var(--space-2) var(--space-3);display:flex;flex-direction:column;gap:0">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <span style="font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--color-accent)">{{ cell.k }}</span>
+            <span style="font-family:var(--font-heading);font-weight:600;font-size:26px;line-height:1.15">{{ cell.v }}</span>
+            <span class="text-muted" style="font-size:10.5px">{{ cell.n }}</span>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:stretch">
+        <figure class="blueprint" style="flex:1 1 440px;min-width:300px;margin:0;display:flex;flex-direction:column;background:var(--color-surface)">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <div ref="{{ mapDiv }}" style="width:100%;flex:1 1 auto;min-height:min(56vh,520px)"></div>
+          <figcaption style="padding:var(--space-2) var(--space-3);display:flex;flex-wrap:wrap;gap:var(--space-3);border-top:1px solid var(--color-divider);background:var(--color-bg)">
+            <span>{{ mapHint }}</span>
+            <span style="margin-left:auto;font-variant-numeric:tabular-nums">{{ hoverLabel }}</span>
+          </figcaption>
+        </figure>
+
+        <aside style="flex:1 1 280px;max-width:340px;display:flex;flex-direction:column;gap:var(--space-3)">
+          <div class="blueprint" style="padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <h6 style="margin:0">Диагностика</h6>
+            <sc-if value="{{ hasAnomaly }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+                <span style="font-size:13px;line-height:1.4">{{ anomalyText }}</span>
+                <span class="text-muted" style="font-size:11px">{{ anomalyRange }}</span>
+                <button class="btn btn-secondary" onClick="{{ selectAnomaly }}">Выделить участок</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ noAnomaly }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:13px;line-height:1.4">{{ cleanText }}</span>
+            </sc-if>
+          </div>
+
+          <div class="blueprint" style="padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <h6 style="margin:0">Выделение</h6>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:3px var(--space-3);font-size:13px;font-variant-numeric:tabular-nums">
+              <span class="text-muted">Точки</span><span>{{ selPointsLabel }}</span>
+              <span class="text-muted">Длина</span><span>{{ selLenLabel }}</span>
+              <span class="text-muted">Время</span><span>{{ selTimeLabel }}</span>
+              <span class="text-muted">Скорость</span><span>{{ selSpeedLabel }}</span>
+              <span class="text-muted">Высота</span><span>{{ selElevLabel }}</span>
+              <span class="text-muted">Пульс</span><span>{{ selHrLabel }}</span>
+            </div>
+            <p class="text-muted" style="font-size:11px;margin:0">Потяните по трек-лайну, чтобы выделить промежуток.</p>
+          </div>
+
+          <div class="blueprint" style="padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)">
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+            <h6 style="margin:0">Темп по километрам</h6>
+            <div style="max-height:232px;overflow:auto">
+            <table class="table" style="font-variant-numeric:tabular-nums">
+              <thead><tr><th>км</th><th>темп</th><th>км/ч</th><th>+м</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ splits }}" as="row" hint-placeholder-count="6">
+                  <tr><td>{{ row.km }}</td><td>{{ row.pace }}</td><td>{{ row.sp }}</td><td>{{ row.gain }}</td></tr>
+                </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="blueprint" style="padding:var(--space-3) var(--space-4) var(--space-2)">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)">
+          <h6 style="margin:0">Трек-лайн</h6>
+          <div class="seg" style="margin-left:auto">
+            <label class="seg-opt"><input type="checkbox" checked="{{ chSp }}" onChange="{{ toggleSp }}">Скорость</label>
+            <label class="seg-opt"><input type="checkbox" checked="{{ chHr }}" onChange="{{ toggleHr }}">Пульс</label>
+            <label class="seg-opt"><input type="checkbox" checked="{{ chPw }}" onChange="{{ togglePw }}">Мощность</label>
+          </div>
+        </div>
+        <svg ref="{{ chartRef }}" viewBox="0 0 1200 178" onMouseDown="{{ chartDown }}" onMouseMove="{{ chartMove }}" onMouseUp="{{ chartUp }}" onMouseLeave="{{ chartLeave }}" style="display:block;width:100%;height:auto;cursor:crosshair;touch-action:none">
+          <g stroke="var(--color-divider)" strokeWidth="1"><path d="M0 40H1200M0 90H1200M0 140H1200M0 176H1200"></path></g>
+          <sc-for list="{{ anomalyBands }}" as="band" hint-placeholder-count="0">
+            <rect x="{{ band.x }}" y="0" width="{{ band.w }}" height="176" fill="var(--color-neutral-400)" fillOpacity=".4"></rect>
+          </sc-for>
+          <sc-for list="{{ pauseBands }}" as="band" hint-placeholder-count="0">
+            <rect x="{{ band.x }}" y="0" width="{{ band.w }}" height="176" fill="var(--color-neutral-500)" fillOpacity=".18"></rect>
+          </sc-for>
+          <path d="{{ elevArea }}" fill="var(--color-accent-300)" fillOpacity=".8"></path>
+          <path d="{{ elevLine }}" fill="none" stroke="var(--color-accent-600)" strokeWidth="1.3"></path>
+          <path d="{{ speedLine }}" fill="none" stroke="var(--color-accent-900)" strokeWidth="1.8"></path>
+          <path d="{{ hrLine }}" fill="none" stroke="var(--color-accent-700)" strokeWidth="1.5" strokeDasharray="6 4"></path>
+          <path d="{{ pwLine }}" fill="none" stroke="var(--color-neutral-700)" strokeWidth="1.4" strokeDasharray="1.5 3"></path>
+          <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+            <g>
+              <rect x="{{ selX }}" y="0" width="{{ selW }}" height="176" fill="var(--color-accent-900)" fillOpacity=".13"></rect>
+              <path d="{{ selEdges }}" stroke="var(--color-accent-900)" strokeWidth="1.6"></path>
+            </g>
+          </sc-if>
+          <sc-if value="{{ hasHover }}" hint-placeholder-val="{{ false }}">
+            <path d="{{ hoverRule }}" stroke="var(--color-accent-900)" strokeWidth="1" strokeDasharray="3 3"></path>
+          </sc-if>
+        </svg>
+        <div style="display:flex;justify-content:space-between;gap:var(--space-3);font-size:11px;color:var(--color-neutral-700);font-variant-numeric:tabular-nums;padding-bottom:var(--space-1)">
+          <span>0 км</span>
+          <span>высота {{ axisBottom }} – {{ axisTop }}</span>
+          <span>{{ chartMid }}</span>
+          <span>{{ stDist }}</span>
+        </div>
+      </section>
+
+      <section class="blueprint" style="padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-2)">
+          <sc-for list="{{ tools }}" as="tool" hint-placeholder-count="9">
+            <button class="{{ tool.cls }}" onClick="{{ tool.pick }}">{{ tool.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:flex-end;border-top:1px solid var(--color-divider);padding-top:var(--space-3)">
+          <div style="flex:1 1 300px;min-width:240px;display:flex;flex-direction:column;gap:2px">
+            <span style="font-family:var(--font-heading);font-weight:600;font-size:19px">{{ toolTitle }}</span>
+            <span class="text-muted" style="font-size:12.5px;line-height:1.45">{{ toolHint }}</span>
+          </div>
+
+          <sc-if value="{{ showDrawModes }}" hint-placeholder-val="{{ false }}">
+            <div class="field" style="flex:0 0 auto">
+              <label>Как строить линию</label>
+              <div class="seg">
+                <label class="seg-opt"><input type="radio" name="dm" checked="{{ dmLine }}" onChange="{{ setDmLine }}">По прямой</label>
+                <label class="seg-opt"><input type="radio" name="dm" checked="{{ dmRoad }}" onChange="{{ setDmRoad }}">По дорогам</label>
+                <label class="seg-opt"><input type="radio" name="dm" checked="{{ dmFree }}" onChange="{{ setDmFree }}">От руки</label>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showSmooth }}" hint-placeholder-val="{{ false }}">
+            <div class="field" style="flex:0 0 auto">
+              <label>Сила сглаживания</label>
+              <div class="seg">
+                <label class="seg-opt"><input type="radio" name="sw" checked="{{ sw3 }}" onChange="{{ setSw3 }}">Слабо</label>
+                <label class="seg-opt"><input type="radio" name="sw" checked="{{ sw7 }}" onChange="{{ setSw7 }}">Средне</label>
+                <label class="seg-opt"><input type="radio" name="sw" checked="{{ sw15 }}" onChange="{{ setSw15 }}">Сильно</label>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showParamPolicy }}" hint-placeholder-val="{{ false }}">
+            <div class="field" style="flex:0 0 auto">
+              <label>Параметры трека</label>
+              <div class="seg">
+                <label class="seg-opt"><input type="radio" name="pp" checked="{{ ppStretch }}" onChange="{{ setPpStretch }}">Растянуть исходные</label>
+                <label class="seg-opt"><input type="radio" name="pp" checked="{{ ppInterp }}" onChange="{{ setPpInterp }}">Интерполировать</label>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showTime }}" hint-placeholder-val="{{ false }}">
+            <div class="field" style="flex:0 0 140px">
+              <label>Старт записи</label>
+              <input class="input" type="text" value="{{ startTime }}" onChange="{{ setStartTime }}">
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-left:auto">
+            <sc-if value="{{ hasSecondary }}" hint-placeholder-val="{{ false }}">
+              <button class="btn btn-secondary" disabled="{{ secondaryOff }}" onClick="{{ onSecondary }}">{{ secondaryLabel }}</button>
+            </sc-if>
+            <button class="btn btn-primary" disabled="{{ primaryOff }}" onClick="{{ onPrimary }}">{{ primaryLabel }}</button>
+            <button class="btn btn-secondary" disabled="{{ noHistory }}" onClick="{{ undo }}">Отменить</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--color-accent-700);min-height:18px">{{ toast }}</div>
+      </section>
+    </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000},&quot;defaultDrawMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;По дорогам&quot;,&quot;По прямой&quot;,&quot;От руки&quot;],&quot;default&quot;:&quot;По дорогам&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Правка&quot;},&quot;paramPolicy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Растянуть исходные&quot;,&quot;Интерполировать&quot;],&quot;default&quot;:&quot;Растянуть исходные&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Правка&quot;},&quot;showPower&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Трек-лайн&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.mapDiv = React.createRef();
+    this.chartRef = React.createRef();
+    const pts = this.buildTrack();
+    this.state = {
+      screen: 'upload', pts, orig: pts.map(p => ({ ...p })), partB: null,
+      sel: null, tool: 'cut', dm: this.dmFromProp(props), pp: (props.paramPolicy ?? 'Растянуть исходные') === 'Интерполировать' ? 'interp' : 'stretch',
+      sw: 7, draft: [], hover: null, history: [], dragging: null, toast: '', ver: 0,
+      ch: { sp: true, hr: true, pw: props.showPower ?? false }, startTime: '09:14'
+    };
+  }
+  static C = { track: '#416180', dark: '#1d2d3d', ghost: '#98989b', partB: '#7a7a7d' };
+  dmFromProp(p) { const v = p.defaultDrawMode ?? 'По дорогам'; return v === 'По прямой' ? 'line' : v === 'От руки' ? 'free' : 'road'; }
+
+  /* ---------- track data ---------- */
+  buildTrack() {
+    const wp = [[55.7570,37.4180],[55.7605,37.4120],[55.7660,37.4090],[55.7720,37.4105],[55.7775,37.4160],[55.7800,37.4250],[55.7790,37.4350],[55.7745,37.4420],[55.7690,37.4460],[55.7630,37.4450],[55.7580,37.4400],[55.7545,37.4330],[55.7540,37.4240],[55.7570,37.4180]];
+    const out = []; const N = 38; let s = 0;
+    for (let i = 0; i < wp.length - 1; i++) {
+      for (let k = 0; k < N; k++) {
+        const t = k / N, a = wp[i], b = wp[i + 1];
+        const j = (Math.sin(s * 0.61) * 1.1 + Math.cos(s * 1.73) * 0.7) * 0.000045;
+        out.push({ lat: a[0] + (b[0] - a[0]) * t + j, lng: a[1] + (b[1] - a[1]) * t + j * 1.6 });
+        s++;
+      }
+    }
+    out.push({ lat: wp[wp.length - 1][0], lng: wp[wp.length - 1][1] });
+    const g0 = Math.round(out.length * 0.42), g1 = g0 + 40, P = { lat: 55.7690, lng: 37.4255 };
+    const A = { ...out[g0] }, B = { ...out[g1] };
+    for (let i = g0; i <= g1; i++) {
+      const t = (i - g0) / (g1 - g0), u = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+      const f = t < 0.5 ? A : P, g = t < 0.5 ? P : B;
+      out[i] = { lat: f.lat + (g.lat - f.lat) * u, lng: f.lng + (g.lng - f.lng) * u, bad: true };
+    }
+    const p0 = Math.round(out.length * 0.72), anchor = { ...out[p0] };
+    for (let i = p0; i < p0 + 13; i++) {
+      out[i] = { lat: anchor.lat + Math.sin(i * 2.1) * 0.000012, lng: anchor.lng + Math.cos(i * 1.7) * 0.000012, sp: 0.5, pause: true };
+    }
+    return this.derive(out);
+  }
+
+  hav(a, b) {
+    const R = 6371000, t = Math.PI / 180;
+    const dla = (b.lat - a.lat) * t, dlo = (b.lng - a.lng) * t;
+    const h = Math.sin(dla / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dlo / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  derive(list) {
+    let d = 0;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (i > 0) d += this.hav(list[i - 1], p);
+      p.d = d;
+      if (p.el === undefined) {
+        p.el = 142 + 24 * Math.sin(d / 2300) + 7 * Math.sin(d / 700);
+        if (p.bad) p.el += 11 * Math.sin(i * 2.3);
+      }
+      if (p.sp === undefined) p.sp = p.bad ? 57 + 6 * Math.sin(i * 0.9) : 26 + 6 * Math.sin(d / 1300) + 1.6 * Math.sin(d / 430);
+      if (p.hr === undefined) p.hr = p.pause ? 118 + 4 * Math.sin(i * 0.5) : 134 + 16 * Math.sin(d / 1800 + 1) + 3 * Math.sin(d / 520);
+      if (p.pw === undefined) p.pw = p.pause ? 0 : 185 + 55 * Math.sin(d / 1100) + 14 * Math.sin(d / 320);
+      if (p.cad === undefined) p.cad = p.pause ? 0 : 82 + 8 * Math.sin(d / 700) + 2 * Math.cos(i * 0.4);
+    }
+    let t = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (i > 0) t += ((list[i].d - list[i - 1].d) / 1000) / Math.max(list[i].sp, 0.4) * 3600;
+      list[i].t = t;
+    }
+    return list;
+  }
+
+  stats(list) {
+    let gain = 0, loss = 0, max = 0, move = 0, hr = 0, pw = 0, cad = 0, nm = 0;
+    for (let i = 1; i < list.length; i++) {
+      const de = list[i].el - list[i - 1].el;
+      if (de > 0) gain += de; else loss -= de;
+      if (list[i].sp > max) max = list[i].sp;
+      if (list[i].sp > 3) { move += list[i].t - list[i - 1].t; nm++; }
+      hr += list[i].hr; pw += list[i].pw; cad += list[i].cad;
+    }
+    const n = list.length, dist = list[n - 1].d;
+    const apw = pw / Math.max(n - 1, 1);
+    return { dist, gain, loss, max, move, total: list[n - 1].t, n,
+      avg: move ? (dist / 1000) / (move / 3600) : 0, hr: hr / Math.max(n - 1, 1),
+      pw: apw, cad: cad / Math.max(n - 1, 1), kcal: apw * move / 1000 * 0.96 };
+  }
+
+  /* ---------- leaflet ---------- */
+  componentDidMount() {
+    this.tryMap();
+    this._hb = setInterval(() => this.tryMap(), 1200);
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => { if (this.map) this.map.invalidateSize(); });
+      if (this.mapDiv.current) this._ro.observe(this.mapDiv.current);
+    }
+  }
+  componentWillUnmount() { clearTimeout(this._t); clearInterval(this._hb); if (this._ro) this._ro.disconnect(); }
+  componentDidUpdate() { this.tryMap(); if (this.map) { this.syncMap(); this.syncHover(); } }
+  tryMap() {
+    clearTimeout(this._t);
+    const el = this.mapDiv.current;
+    if (this.state.screen !== 'editor' || !el || !window.L) { this._t = setTimeout(() => this.tryMap(), 200); return; }
+    if (this.map) {
+      let live = false;
+      try { live = this.map.getContainer() === el && el.querySelector('.leaflet-tile-pane') && el.isConnected; } catch (e) { live = false; }
+      if (live) return;
+      try { this.map.remove(); } catch (e) { /* stale instance */ }
+      this.map = null; this.layer = null; this.hl = null;
+    }
+    const L = window.L;
+    if (el._leaflet_id) { delete el._leaflet_id; el.innerHTML = ''; }
+    this.map = L.map(el, { zoomControl: true, preferCanvas: false, center: [55.769, 37.428], zoom: 14 });
+    L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(this.map);
+    this.layer = L.layerGroup().addTo(this.map);
+    this.hl = L.layerGroup().addTo(this.map);
+    const fit = () => {
+      if (!this.map) return;
+      this.map.invalidateSize();
+      try { this.map.fitBounds(window.L.latLngBounds(this.state.pts.map(p => [p.lat, p.lng])), { padding: [26, 26] }); } catch (e) { /* keep default view */ }
+      this._sig = null; this.syncMap(); this.syncHover();
+    };
+    if (this._ro) { try { this._ro.observe(el); } catch (e) { /* already observed */ } }
+    requestAnimationFrame(fit);
+    setTimeout(fit, 400);
+    this.map.on('click', e => this.onMapClick(e));
+    this.map.on('mousedown', e => this.onMapDown(e));
+    this.map.on('mousemove', e => this.onMapMove(e));
+    this.map.on('mouseup', () => this.onMapUp());
+    setTimeout(() => this.map.invalidateSize(), 60);
+    this._sig = null; this.syncMap();
+  }
+  sig() {
+    const s = this.state, sp = this.span();
+    return [s.ver, s.pts.length, sp && sp.a, sp && sp.b, s.draft.length, s.tool, s.dm].join('|');
+  }
+  syncMap() {
+    const L = window.L; if (!L || !this.map) return;
+    const sg = this.sig(); if (sg === this._sig) return; this._sig = sg;
+    const st = this.state, g = this.layer, ll = p => [p.lat, p.lng];
+    const ok = p => p && isFinite(p.lat) && isFinite(p.lng);
+    const pts = st.pts.filter(ok);
+    if (!pts.length) return;
+    g.clearLayers();
+    const C = Component.C;
+    const sp = this.span();
+    if (st.ver > 0) L.polyline(st.orig.filter(ok).map(ll), { color: C.ghost, weight: 2, dashArray: '5 5' }).addTo(g);
+    if (st.partB) L.polyline(st.partB.filter(ok).map(ll), { color: C.partB, weight: 3, dashArray: '2 5' }).addTo(g);
+    if (sp) L.polyline(pts.slice(sp.a, sp.b + 1).map(ll), { color: C.dark, weight: 13, opacity: 0.25, lineCap: 'round' }).addTo(g);
+    L.polyline(pts.map(ll), { color: C.track, weight: 4 }).addTo(g);
+    let run = null;
+    pts.forEach((p, i) => {
+      if (p.fixed) {
+        if (!run) { run = [pts[Math.max(0, i - 1)]]; L.polyline(run.map(ll), { color: C.dark, weight: 5 }).addTo(g)._runArr = run; }
+        run.push(p);
+      } else run = null;
+    });
+    g.getLayers().forEach(l => { if (l._runArr) l.setLatLngs(l._runArr.map(ll)); });
+    if (st.draft.length) {
+      const d = st.draft.filter(ok);
+      L.polyline([].concat(sp ? [ll(pts[sp.a])] : [], d.map(ll), sp ? [ll(pts[sp.b])] : []), { color: C.dark, weight: 2.5, dashArray: '7 4' }).addTo(g);
+      d.forEach(p => L.marker(ll(p), { icon: this.sq(), interactive: false }).addTo(g));
+    }
+    if (st.tool === 'points') {
+      const a = sp ? sp.a : 0, b = sp ? sp.b : pts.length - 1;
+      const step = Math.max(1, Math.ceil((b - a + 1) / 45));
+      for (let i = a; i <= b; i += step) {
+        const idx = i;
+        L.marker(ll(pts[idx]), { icon: this.sq(), draggable: true })
+          .on('dragend', ev => this.movePoint(idx, ev.target.getLatLng()))
+          .addTo(g);
+      }
+    }
+    L.marker(ll(pts[0]), { icon: this.sq(C.dark), interactive: false }).addTo(g);
+    L.circleMarker(ll(pts[pts.length - 1]), { radius: 6, color: C.dark, weight: 2.5, fill: false }).addTo(g);
+  }
+  sq(fill) {
+    return window.L.divIcon({ className: '', iconSize: [12, 12], iconAnchor: [6, 6],
+      html: '<div style="width:12px;height:12px;background:' + (fill || '#f2f2f3') + ';border:1.6px solid ' + Component.C.dark + '"></div>' });
+  }
+  syncHover() {
+    const L = window.L; if (!L || !this.hl) return;
+    this.hl.clearLayers();
+    const h = this.state.hover; if (h == null) return;
+    const p = this.state.pts[h];
+    if (!p || !isFinite(p.lat) || !isFinite(p.lng)) return;
+    const C = Component.C;
+    L.circleMarker([p.lat, p.lng], { radius: 9, color: C.dark, weight: 1.2, fill: false }).addTo(this.hl);
+    L.circleMarker([p.lat, p.lng], { radius: 3.5, color: C.dark, fillColor: C.dark, fillOpacity: 1, weight: 0 }).addTo(this.hl);
+  }
+
+  onMapClick(e) {
+    const st = this.state, p = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if (st.tool === 'redraw' && st.dm !== 'free' && this.span()) this.setState(s => ({ draft: s.draft.concat([p]), toast: 'Точек в новой линии: ' + (s.draft.length + 1) }));
+    else if (st.tool === 'points') this.insertPoint(p);
+  }
+  onMapDown(e) {
+    if (this.state.tool !== 'redraw' || this.state.dm !== 'free' || !this.span()) return;
+    this._free = true; this.map.dragging.disable();
+    this.setState({ draft: [{ lat: e.latlng.lat, lng: e.latlng.lng }] });
+  }
+  onMapMove(e) {
+    if (!this._free) return;
+    const p = { lat: e.latlng.lat, lng: e.latlng.lng }, d = this.state.draft;
+    if (!d.length || this.hav(d[d.length - 1], p) > 25) this.setState(s => ({ draft: s.draft.concat([p]) }));
+  }
+  onMapUp() {
+    if (!this._free) return;
+    this._free = false; this.map.dragging.enable();
+    this.setState(s => ({ toast: 'Нарисовано ' + s.draft.length + ' точек · нажмите «Заменить геометрию»' }));
+  }
+  insertPoint(p) {
+    const pts = this.state.pts; let best = 1, bd = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+      const d = this.hav(pts[i - 1], p) + this.hav(pts[i], p);
+      if (d < bd) { bd = d; best = i; }
+    }
+    const q = { lat: p.lat, lng: p.lng, fixed: true, el: pts[best].el, sp: pts[best].sp, hr: pts[best].hr, pw: pts[best].pw, cad: pts[best].cad };
+    const next = this.derive(pts.slice(0, best).map(o => ({ ...o })).concat([q], pts.slice(best).map(o => ({ ...o, d: undefined }))));
+    this.push(next, { toast: 'Точка добавлена между ' + best + ' и ' + (best + 1) });
+  }
+  movePoint(i, latlng) {
+    const next = this.state.pts.map(p => ({ ...p, d: undefined }));
+    next[i] = { ...next[i], lat: latlng.lat, lng: latlng.lng, fixed: true };
+    this.push(this.derive(next), { toast: 'Точка ' + (i + 1) + ' перемещена · параметры сохранены' });
+  }
+
+  /* ---------- helpers ---------- */
+  fmtT(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h ? h + ':' + String(m).padStart(2, '0') : m + ' мин';
+  }
+  pace(sp) { if (sp <= 0.2) return '—'; const s = 3600 / sp; return Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0'); }
+  span() { const s = this.state.sel; return s ? { a: Math.min(s.a, s.b), b: Math.max(s.a, s.b) } : null; }
+  push(pts, extra) { this.setState(st => ({ history: st.history.concat([{ pts: st.pts, partB: st.partB }]), pts, ver: st.ver + 1, ...extra })); }
+  anomaly() { const p = this.state.pts; let a = -1, b = -1; for (let i = 0; i < p.length; i++) if (p[i].sp > 45) { if (a < 0) a = i; b = i; } return a < 0 ? null : { a, b }; }
+  idxAt(e) {
+    const r = this.chartRef.current.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    return Math.round(f * (this.state.pts.length - 1));
+  }
+
+  /* ---------- edits ---------- */
+  cut() { const sp = this.span(); const pts = this.state.pts;
+    this.push(this.derive(pts.slice(0, sp.a).concat(pts.slice(sp.b + 1)).map(p => ({ ...p, d: undefined }))),
+      { sel: null, draft: [], toast: 'Вырезано ' + (sp.b - sp.a + 1) + ' точек · параметры соседних точек не изменены' }); }
+  smooth() { const sp = this.span(), pts = this.state.pts, w = Math.floor(this.state.sw / 2), next = pts.map(p => ({ ...p, d: undefined }));
+    for (let i = sp.a; i <= sp.b; i++) { let la = 0, lo = 0, c = 0;
+      for (let k = -w; k <= w; k++) { const j = i + k; if (j >= 0 && j < pts.length) { la += pts[j].lat; lo += pts[j].lng; c++; } }
+      next[i].lat = la / c; next[i].lng = lo / c; }
+    this.push(this.derive(next), { toast: 'GPS-шум сглажен · окно ' + this.state.sw + ' точек' }); }
+  dem() { const sp = this.span(), pts = this.state.pts, a = sp ? sp.a : 0, b = sp ? sp.b : pts.length - 1;
+    const next = pts.map((p, i) => (i >= a && i <= b ? { ...p, el: 130 + 45 * Math.sin(p.d / 2200) + 14 * Math.sin(p.d / 600), demFixed: true } : { ...p }));
+    this.push(this.derive(next), { toast: 'Высота пересчитана по DEM на ' + (b - a + 1) + ' точках' }); }
+  trimToSel() { const sp = this.span(), pts = this.state.pts;
+    this.push(this.derive(pts.slice(sp.a, sp.b + 1).map(p => ({ ...p, d: undefined }))), { sel: null, toast: 'Оставлен только выделенный промежуток' }); }
+  trimHead() { const sp = this.span(), pts = this.state.pts;
+    this.push(this.derive(pts.slice(sp.a).map(p => ({ ...p, d: undefined }))), { sel: null, toast: 'Начало трека обрезано' }); }
+  split() { const sp = this.span(), pts = this.state.pts;
+    this.push(this.derive(pts.slice(0, sp.a + 1).map(p => ({ ...p, d: undefined }))),
+      { partB: pts.slice(sp.a).map(p => ({ ...p, d: undefined })), sel: null, toast: 'Трек разделён · часть B отложена (пунктир на карте)' }); }
+  merge() { const pts = this.state.pts, b = this.state.partB;
+    this.push(this.derive(pts.concat(b.map(p => ({ ...p, d: undefined, t: undefined })))), { partB: null, toast: 'Части склеены · ' + (pts.length + b.length) + ' точек' }); }
+  dropPauses() { const pts = this.state.pts, next = pts.filter((p, i) => i === 0 || p.sp > 3);
+    this.push(this.derive(next.map(p => ({ ...p, d: undefined }))), { sel: null, toast: 'Удалено ' + (pts.length - next.length) + ' точек паузы · время пересчитано' }); }
+
+  async applyRedraw() {
+    const sp = this.span(), st = this.state, pts = st.pts;
+    if (!sp || !st.draft.length) return;
+    let path = [{ lat: pts[sp.a].lat, lng: pts[sp.a].lng }].concat(st.draft, [{ lat: pts[sp.b].lat, lng: pts[sp.b].lng }]);
+    let note = st.dm === 'free' ? 'линия от руки' : 'линия по прямым';
+    if (st.dm === 'road') {
+      this.setState({ toast: 'Привязка к дорогам…' });
+      try {
+        const c = path.map(p => p.lng.toFixed(6) + ',' + p.lat.toFixed(6)).join(';');
+        const r = await fetch('https://router.project-osrm.org/route/v1/bike/' + c + '?overview=full&geometries=geojson');
+        const j = await r.json();
+        if (j.routes && j.routes[0]) { path = j.routes[0].geometry.coordinates.map(k => ({ lat: k[1], lng: k[0] })); note = 'маршрут привязан к дорогам'; }
+        else note = 'дороги не найдены, построено по прямой';
+      } catch (err) { note = 'сервис дорог недоступен, построено по прямой'; }
+    }
+    const segs = []; let L = 0;
+    for (let i = 1; i < path.length; i++) { const l = this.hav(path[i - 1], path[i]); segs.push(l); L += l; }
+    const spacing = Math.max(6, (pts[sp.b].d - pts[sp.a].d) / Math.max(sp.b - sp.a, 1));
+    const count = Math.max(4, Math.round(L / spacing)), res = [];
+    for (let k = 0; k <= count; k++) {
+      const target = L * k / count; let done = 0, pt = path[path.length - 1];
+      for (let i = 1; i < path.length; i++) {
+        if (done + segs[i - 1] >= target || i === path.length - 1) {
+          const u = segs[i - 1] ? Math.min(1, (target - done) / segs[i - 1]) : 0;
+          pt = { lat: path[i - 1].lat + (path[i].lat - path[i - 1].lat) * u, lng: path[i - 1].lng + (path[i].lng - path[i - 1].lng) * u };
+          break;
+        }
+        done += segs[i - 1];
+      }
+      res.push(pt);
+    }
+    const A = pts[sp.a], B = pts[sp.b];
+    const src = pts.slice(sp.a, sp.b + 1).filter(p => p.sp <= 45);
+    res.forEach((p, i) => {
+      const u = res.length > 1 ? i / (res.length - 1) : 0;
+      if (st.pp === 'stretch' && src.length > 1) {
+        const q = src[Math.round(u * (src.length - 1))];
+        p.el = q.el; p.sp = q.sp; p.hr = q.hr; p.pw = q.pw; p.cad = q.cad;
+      } else {
+        p.el = A.el + (B.el - A.el) * u; p.sp = A.sp + (B.sp - A.sp) * u;
+        p.hr = A.hr + (B.hr - A.hr) * u; p.pw = A.pw + (B.pw - A.pw) * u; p.cad = A.cad + (B.cad - A.cad) * u;
+      }
+      p.fixed = true;
+    });
+    const next = this.derive(pts.slice(0, sp.a).map(p => ({ ...p })).concat(res, pts.slice(sp.b + 1).map(p => ({ ...p, d: undefined }))));
+    this.push(next, { sel: null, draft: [], toast: 'Геометрия заменена: ' + res.length + ' точек · ' + note + ' · ' + (st.pp === 'stretch' ? 'исходные параметры растянуты по новой длине' : 'параметры интерполированы по краям') });
+  }
+
+  toolCfg() {
+    const st = this.state, sp = this.span(), has = !!sp;
+    const T = {
+      cut: { title: 'Вырезать участок', hint: 'Удаляет выделенные точки. Соседние точки соединяются, их параметры остаются как в файле.', primary: 'Вырезать выделение', off: !has, run: () => this.cut() },
+      redraw: { title: 'Перерисовать участок по карте', hint: has ? 'Кликайте по карте (или тяните в режиме «от руки»), чтобы задать правильный маршрут между краями выделения.' : 'Сначала выделите промежуток на трек-лайне.', primary: 'Заменить геометрию', off: !(has && st.draft.length), run: () => this.applyRedraw(), draw: true, policy: true, sec: 'Сбросить линию', secOff: !st.draft.length, secRun: () => this.setState({ draft: [], toast: '' }) },
+      points: { title: 'Добавить и переместить точки', hint: 'Тяните квадратные маркеры на карте. Клик по карте вставляет точку в ближайший сегмент.', primary: 'Готово', off: false, run: () => this.setState({ tool: 'cut', toast: 'Правка точек завершена' }) },
+      smooth: { title: 'Сгладить GPS-шум', hint: 'Скользящее среднее по координатам внутри выделения. Высота, скорость и датчики не меняются.', primary: 'Сгладить', off: !has, run: () => this.smooth(), smooth: true },
+      dem: { title: 'Исправить высоту по DEM', hint: 'Заменяет барометрические выбросы профилем рельефа. Работает по выделению или по всему треку.', primary: 'Пересчитать высоту', off: false, run: () => this.dem() },
+      trim: { title: 'Обрезать начало и конец', hint: 'Выделите нужную часть записи — остальное отбрасывается.', primary: 'Оставить выделение', off: !has, run: () => this.trimToSel(), sec: 'Отрезать начало', secOff: !has, secRun: () => this.trimHead() },
+      split: { title: 'Разделить трек', hint: 'Точка разделения — начало выделения. Часть B откладывается и показывается пунктиром.', primary: 'Разделить здесь', off: !has, run: () => this.split() },
+      merge: { title: 'Склеить два трека', hint: st.partB ? 'Часть B будет присоединена к концу текущего трека, время продолжится непрерывно.' : 'Нет отложенной части. Разделите трек или загрузите второй файл.', primary: 'Присоединить часть B', off: !st.partB, run: () => this.merge(), sec: 'Загрузить второй файл', secOff: false, secRun: () => this.setState({ toast: 'Выбор второго файла — в прототипе не подключён' }) },
+      time: { title: 'Сдвинуть время и паузы', hint: 'Старт записи задаётся вручную. Удаление пауз убирает точки со скоростью ниже 3 км/ч.', primary: 'Удалить паузы', off: false, run: () => this.dropPauses(), time: true, sec: 'Применить сдвиг', secOff: false, secRun: () => this.setState({ toast: 'Старт записи сдвинут на ' + this.state.startTime }) }
+    };
+    return T[st.tool];
+  }
+
+  renderVals() {
+    const st = this.state, pts = st.pts, n = pts.length;
+    const s = this.stats(pts), o = this.stats(st.orig), sp = this.span(), cfg = this.toolCfg();
+    const W = 1200, xOf = i => i / (n - 1) * W;
+    const els = pts.map(p => p.el), e0 = Math.min(...els), e1 = Math.max(...els);
+    const yE = v => 176 - (v - e0) / Math.max(e1 - e0, 1) * 104;
+    const norm = (arr, v) => { const a = Math.min(...arr), b = Math.max(...arr); return 166 - (v - a) / Math.max(b - a, 1) * 148; };
+    const sps = pts.map(p => p.sp), hrs = pts.map(p => p.hr), pws = pts.map(p => p.pw);
+    let ea = 'M0 176', el = '', sl = '', hl = '', pl = '';
+    pts.forEach((p, i) => {
+      const x = xOf(i).toFixed(1), ye = yE(p.el).toFixed(1);
+      ea += ' L' + x + ' ' + ye;
+      el += (i ? ' L' : 'M') + x + ' ' + ye;
+      if (st.ch.sp) sl += (i ? ' L' : 'M') + x + ' ' + norm(sps, p.sp).toFixed(1);
+      if (st.ch.hr) hl += (i ? ' L' : 'M') + x + ' ' + norm(hrs, p.hr).toFixed(1);
+      if (st.ch.pw) pl += (i ? ' L' : 'M') + x + ' ' + norm(pws, p.pw).toFixed(1);
+    });
+    ea += ' L1200 176 Z';
+
+    const band = (test) => { const out = []; let a = -1;
+      pts.forEach((p, i) => { const on = test(p);
+        if (on && a < 0) a = i;
+        if ((!on || i === n - 1) && a >= 0) { out.push({ x: xOf(a), w: Math.max(2, xOf(i) - xOf(a)) }); a = -1; } });
+      return out; };
+    const an = this.anomaly(), hv = st.hover != null ? pts[st.hover] : null;
+
+    const splits = []; let bIdx = 0;
+    for (let km = 1; km < 200; km++) {
+      let i = bIdx; while (i < n && pts[i].d < km * 1000) i++;
+      const end = Math.min(i, n - 1), A = pts[bIdx], B = pts[end];
+      const dd = (B.d - A.d) / 1000, dt = B.t - A.t;
+      if (dd < 0.02) break;
+      let g = 0; for (let k = bIdx + 1; k <= end; k++) { const de = pts[k].el - pts[k - 1].el; if (de > 0) g += de; }
+      const v = dt > 0 ? dd / (dt / 3600) : 0;
+      splits.push({ km: dd > 0.95 ? String(km) : km + ' · ' + dd.toFixed(2), pace: this.pace(v), sp: v.toFixed(1), gain: '+' + Math.round(g) });
+      bIdx = end; if (end >= n - 1) break;
+    }
+
+    let selInfo = { p: '—', l: '—', t: '—', s: '—', e: '—', h: '—' };
+    if (sp) {
+      const A = pts[sp.a], B = pts[sp.b], seg = pts.slice(sp.a, sp.b + 1), ss = seg.map(p => p.sp);
+      selInfo = { p: (sp.b - sp.a + 1) + ' из ' + n, l: ((B.d - A.d) / 1000).toFixed(2) + ' км', t: this.fmtT(B.t - A.t),
+        s: Math.min(...ss).toFixed(0) + '–' + Math.max(...ss).toFixed(0) + ' км/ч',
+        e: Math.min(...seg.map(p => p.el)).toFixed(0) + '–' + Math.max(...seg.map(p => p.el)).toFixed(0) + ' м',
+        h: Math.round(seg.reduce((a, p) => a + p.hr, 0) / seg.length) + ' уд/мин' };
+    }
+
+    const toolList = [['cut','Вырезать'],['redraw','Перерисовать'],['points','Точки'],['smooth','Сгладить'],['dem','Высота DEM'],['trim','Обрезать'],['split','Разделить'],['merge','Склеить'],['time','Время и паузы']];
+
+    return {
+      isUpload: st.screen === 'upload', isEditor: st.screen === 'editor',
+      fileName: st.screen === 'upload' ? 'файл не выбран' : 'ride_2026-09-08_morning.fit',
+      load: () => this.setState({ screen: 'editor', toast: 'Файл разобран: 1 трек, ' + n + ' точек, датчики: скорость, высота, пульс, мощность, каденс' }),
+      reset: () => this.setState({ screen: 'upload', sel: null, draft: [], toast: '' }),
+      exportFile: () => this.setState({ toast: 'ride_2026-09-08_morning_fixed.gpx готов · ' + n + ' точек · ' + (s.dist / 1000).toFixed(2) + ' км' }),
+
+      statCells: [
+        { k: 'Дистанция', v: (s.dist / 1000).toFixed(2), n: st.ver ? ((s.dist - o.dist) / 1000 >= 0 ? '+' : '') + ((s.dist - o.dist) / 1000).toFixed(2) + ' км к исходному' : 'км · как в файле' },
+        { k: 'В движении', v: this.fmtT(s.move), n: 'общее ' + this.fmtT(s.total) },
+        { k: 'Набор', v: Math.round(s.gain) + ' м', n: 'спуск ' + Math.round(s.loss) + ' м' },
+        { k: 'Средняя', v: s.avg.toFixed(1), n: 'км/ч · темп ' + this.pace(s.avg) + '/км' },
+        { k: 'Максимум', v: s.max.toFixed(0), n: s.max > 45 ? 'км/ч · подозрительно' : 'км/ч · в норме' },
+        { k: 'Мощность', v: Math.round(s.pw), n: 'Вт средних' },
+        { k: 'Пульс', v: Math.round(s.hr), n: 'уд/мин средних' },
+        { k: 'Каденс', v: Math.round(s.cad), n: 'об/мин' },
+        { k: 'Калории', v: Math.round(s.kcal), n: 'ккал' }
+      ],
+      stDist: (s.dist / 1000).toFixed(2) + ' км',
+
+      mapDiv: this.mapDiv, chartRef: this.chartRef,
+      mapHint: st.tool === 'redraw' ? (sp ? (st.dm === 'free' ? 'Тяните по карте, чтобы нарисовать линию' : 'Кликайте по карте — точки новой линии') : 'Выделите промежуток на трек-лайне') :
+        st.tool === 'points' ? 'Тяните маркеры · клик вставляет точку' : 'Пунктир — исходная геометрия, сплошная — текущая',
+      hoverLabel: hv ? (hv.d / 1000).toFixed(2) + ' км · ' + hv.el.toFixed(0) + ' м · ' + hv.sp.toFixed(1) + ' км/ч · ' + Math.round(hv.hr) + ' уд · ' + Math.round(hv.pw) + ' Вт' : 'наведите на трек-лайн',
+
+      elevArea: ea, elevLine: el, speedLine: sl, hrLine: hl, pwLine: pl,
+      anomalyBands: band(p => p.sp > 45), pauseBands: band(p => p.sp <= 3),
+      chartMid: (s.dist / 2000).toFixed(1) + ' км',
+      axisTop: Math.round(e1) + ' м', axisBottom: Math.round(e0) + ' м',
+      hasSel: !!sp, selX: sp ? xOf(sp.a) : 0, selW: sp ? Math.max(2, xOf(sp.b) - xOf(sp.a)) : 0,
+      selEdges: sp ? 'M' + xOf(sp.a).toFixed(1) + ' 0V176M' + xOf(sp.b).toFixed(1) + ' 0V176' : '',
+      hasHover: hv != null, hoverRule: hv ? 'M' + xOf(st.hover).toFixed(1) + ' 0V176' : '',
+
+      chartDown: e => { const i = this.idxAt(e); this.setState({ dragging: i, sel: { a: i, b: i }, hover: i }); },
+      chartMove: e => { const i = this.idxAt(e); if (st.dragging != null) this.setState({ sel: { a: st.dragging, b: i }, hover: i }); else this.setState({ hover: i }); },
+      chartUp: () => this.setState(p => ({ dragging: null, sel: p.sel && Math.abs(p.sel.a - p.sel.b) < 2 ? null : p.sel })),
+      chartLeave: () => this.setState({ dragging: null, hover: null }),
+      chSp: st.ch.sp, chHr: st.ch.hr, chPw: st.ch.pw,
+      toggleSp: () => this.setState(p => ({ ch: { ...p.ch, sp: !p.ch.sp } })),
+      toggleHr: () => this.setState(p => ({ ch: { ...p.ch, hr: !p.ch.hr } })),
+      togglePw: () => this.setState(p => ({ ch: { ...p.ch, pw: !p.ch.pw } })),
+
+      splits, selPointsLabel: selInfo.p, selLenLabel: selInfo.l, selTimeLabel: selInfo.t,
+      selSpeedLabel: selInfo.s, selElevLabel: selInfo.e, selHrLabel: selInfo.h,
+
+      hasAnomaly: !!an, noAnomaly: !an,
+      anomalyText: an ? 'Скорость до ' + s.max.toFixed(0) + ' км/ч на ' + (an.b - an.a + 1) + ' точках — похоже на потерю сигнала и прямую «врезку» в маршрут.' : '',
+      anomalyRange: an ? 'с ' + (pts[an.a].d / 1000).toFixed(2) + ' км по ' + (pts[an.b].d / 1000).toFixed(2) + ' км' : '',
+      cleanText: 'Аномалий скорости нет. Пауз: ' + band(p => p.sp <= 3).length + ' · геометрия непрерывна.',
+      selectAnomaly: () => { const a = this.anomaly(); if (a) this.setState({ sel: a, hover: a.a, tool: 'redraw', toast: 'Участок выделен. Вырежьте его или нарисуйте правильный маршрут по карте.' }); },
+
+      tools: toolList.map(([id, label]) => ({ id, label, cls: 'btn ' + (st.tool === id ? 'btn-primary' : 'btn-secondary'), pick: () => this.setState({ tool: id, draft: [], toast: '' }) })),
+      toolTitle: cfg.title, toolHint: cfg.hint,
+      primaryLabel: cfg.primary, primaryOff: !!cfg.off, onPrimary: cfg.run,
+      hasSecondary: !!cfg.sec, secondaryLabel: cfg.sec || '', secondaryOff: !!cfg.secOff, onSecondary: cfg.secRun || (() => {}),
+      showDrawModes: !!cfg.draw, showSmooth: !!cfg.smooth, showParamPolicy: !!cfg.policy, showTime: !!cfg.time,
+      dmLine: st.dm === 'line', dmRoad: st.dm === 'road', dmFree: st.dm === 'free',
+      setDmLine: () => this.setState({ dm: 'line', draft: [] }), setDmRoad: () => this.setState({ dm: 'road', draft: [] }), setDmFree: () => this.setState({ dm: 'free', draft: [] }),
+      sw3: st.sw === 3, sw7: st.sw === 7, sw15: st.sw === 15,
+      setSw3: () => this.setState({ sw: 3 }), setSw7: () => this.setState({ sw: 7 }), setSw15: () => this.setState({ sw: 15 }),
+      ppStretch: st.pp === 'stretch', ppInterp: st.pp === 'interp',
+      setPpStretch: () => this.setState({ pp: 'stretch' }), setPpInterp: () => this.setState({ pp: 'interp' }),
+      startTime: st.startTime, setStartTime: e => this.setState({ startTime: e.target.value }),
+      noHistory: !st.history.length,
+      undo: () => this.setState(p => { const h = p.history[p.history.length - 1]; return { pts: h.pts, partB: h.partB, history: p.history.slice(0, -1), sel: null, draft: [], ver: p.ver + 1, toast: 'Последнее действие отменено' }; }),
+      toast: st.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

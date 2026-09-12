@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    image: track-fixer:latest
+    container_name: track-fixer
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-wild-loop.ru}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data      # issued certificates — keep between rebuilds
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
