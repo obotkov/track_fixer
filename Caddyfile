@@ -17,7 +17,7 @@
 	# ES modules; the pinned Leaflet build can be cached for a day.
 	@vendor path /vendor/* /favicon.svg
 	header @vendor Cache-Control "public, max-age=86400"
-	@app path / /index.html /css/* /js/*
+	@app path / /index.html /css/* /js/* /config/*
 	header @app Cache-Control "no-cache"
 }
 

@@ -1,0 +1,20 @@
+{
+  "_about": "Default rules for automatic GPS outlier detection. Edit to change them for every visitor; each visitor can still tweak them in «Диагностика → Настроить» (kept in their browser). Unknown keys are ignored.",
+
+  "showOnMap": true,
+
+  "_speed": "A segment between two points faster than maxKmh is a glitch (teleport or signal loss).",
+  "speed": { "enabled": true, "maxKmh": 65 },
+
+  "_jump": "A single step longer than maxM, or longer than vsMedian × the track's typical step, is a signal-loss jump.",
+  "jump": { "enabled": true, "maxM": 250, "vsMedian": 25 },
+
+  "_spike": "A point that flies off and comes back: both legs to its neighbours are longer than minM and the angle at the point is below maxAngleDeg (a sharp V; ordinary corners are ~90°).",
+  "spike": { "enabled": true, "minM": 30, "maxAngleDeg": 60 },
+
+  "_mergeGapPoints": "Outliers separated by at most this many clean points are merged into one stretch.",
+  "mergeGapPoints": 4,
+
+  "_pause": "Standing still: slower than maxKmh for at least minSec. Affects moving time, pause bands and «Удалить паузы».",
+  "pause": { "maxKmh": 3, "minSec": 5 }
+}

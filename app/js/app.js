@@ -1,10 +1,11 @@
 // TrackFix UI controller: one state object, a rAF-batched render, memoised heavy parts.
 import {
-  THRESH, derive, trackStats, findAnomalies, findPauses, kmSplits, medianSpacing, normalize, hav,
+  THRESH, derive, trackStats, findPauses, kmSplits, medianSpacing, normalize, hav,
   cutRange, keepRange, dropHead, splitAt, mergeTracks, smoothRange, dropPauses, shiftTime,
   insertPoint, insertAt, dragShift, dragPoint, removePoint, dropOutliers, replaceGeometry, applyElevation,
 } from './track.js';
 import { parseTrackFile } from './parsers.js';
+import { CFG, loadConfig, setConfig, resetConfig, findAnomalies, describe, shortLabel } from './detect.js';
 import { routeByBike, fetchElevations } from './services.js';
 import { toGPX, downloadFile } from './exporter.js';
 import { buildDemoRaw } from './demo.js';
@@ -51,7 +52,7 @@ const span = () => (S.sel ? { a: Math.min(S.sel.a, S.sel.b), b: Math.max(S.sel.a
 function recompute() {
   D = derive(S.pts);
   M.stats = trackStats(S.pts, D);
-  M.anoms = findAnomalies(S.pts, D);
+  M.anoms = findAnomalies(S.pts, D, CFG);
   M.pauses = findPauses(S.pts, D);
   M.splits = kmSplits(S.pts, D);
   if (S.anomIdx >= M.anoms.length) S.anomIdx = 0;
@@ -287,15 +288,21 @@ function toolCfg() {
   }
 }
 
+/** Select detected stretch k (from the diagnostics button or a click on the map) and open redraw. */
+function selectRun(k) {
+  const r = M.anoms[k];
+  if (!r) return;
+  Object.assign(S, { anomIdx: k, sel: { a: r.a, b: r.b }, hover: r.a, tool: 'redraw', draft: [], active: null,
+    toast: describe(r) + ' Участок выделен — вырежьте его или перерисуйте по карте.' });
+  if (map) map.showRange(S.pts, r);
+  render();
+}
+
 function selectAnomaly() {
   const an = M.anoms;
   if (!an.length) return;
   const cur = an[S.anomIdx], sp = span();
-  if (sp && sp.a === cur.a && sp.b === cur.b && an.length > 1) S.anomIdx = (S.anomIdx + 1) % an.length;
-  const r = an[S.anomIdx];
-  Object.assign(S, { sel: { a: r.a, b: r.b }, hover: r.a, tool: 'redraw', draft: [], toast: 'Участок выделен. Вырежьте его или нарисуйте правильный маршрут по карте.' });
-  if (map) map.showRange(S.pts, { a: r.a, b: r.b });
-  render();
+  selectRun(sp && sp.a === cur.a && sp.b === cur.b && an.length > 1 ? (S.anomIdx + 1) % an.length : S.anomIdx);
 }
 
 /* ───────────── drawing ───────────── */
@@ -387,14 +394,11 @@ function drawDiag() {
   $('diagAnomaly').hidden = !an.length;
   $('cleanText').hidden = !!an.length;
   if (!an.length) {
-    $('cleanText').textContent = `Аномалий скорости нет. Пауз: ${M.pauses.length} · геометрия непрерывна.`;
+    $('cleanText').textContent = `Выбросов не найдено. Пауз: ${M.pauses.length} · геометрия непрерывна.`;
     return;
   }
   const cur = an[S.anomIdx];
-  $('anomalyText').textContent = (an.length > 1 ? `Найдено участков: ${an.length}. ` : '')
-    + (cur.kind === 'speed'
-      ? `Скорость до ${Math.round(cur.maxV)} км/ч на ${cur.b - cur.a + 1} точках — похоже на потерю сигнала и прямую «врезку» в маршрут.`
-      : `Скачок ${Math.round(cur.maxLen)} м между соседними точками — похоже на потерю сигнала.`);
+  $('anomalyText').textContent = (an.length > 1 ? `Найдено участков: ${an.length}. ` : '') + describe(cur);
   $('anomalyRange').textContent = `с ${km(D.d[cur.a])} км по ${km(D.d[cur.b])} км`;
   $('btnSelectAnomaly').textContent = an.length > 1 ? `Выделить участок ${S.anomIdx + 1}/${an.length}` : 'Выделить участок';
 }
@@ -510,8 +514,11 @@ function drawTools() {
 function drawMap() {
   if (!map) return;
   const sp = span(), sk = sp ? sp.a + ':' + sp.b : '-';
-  const baseKey = S.ver + '|' + (S.partB ? S.partB.length : 0);
-  if (last.base !== baseKey) { last.base = baseKey; map.setBase({ pts: S.pts, orig: S.orig, partB: S.partB, ghost: S.pts !== S.orig, gaps: M.anoms }); }
+  const show = CFG.showOnMap, pickable = S.tool !== 'redraw' && S.tool !== 'points';
+  const baseKey = S.ver + '|' + (S.partB ? S.partB.length : 0) + '|' + show;
+  if (last.base !== baseKey) { last.base = baseKey; map.setBase({ pts: S.pts, orig: S.orig, partB: S.partB, ghost: S.pts !== S.orig, gaps: M.anoms, dotGaps: !show }); }
+  const outKey = S.ver + '|' + show + '|' + pickable;
+  if (last.out !== outKey) { last.out = outKey; map.setOutliers(S.pts, show ? M.anoms : null, M.anoms.map(shortLabel), selectRun, pickable); }
   const selKey = S.ver + '|' + sk;
   if (last.sel !== selKey) { last.sel = selKey; map.setSel(S.pts, sp); }
   const draftKey = selKey + '|' + S.draft.length + '|' + S.dm;
@@ -532,7 +539,7 @@ function drawMap() {
     ? (sp ? (S.dm === 'free' ? 'Тяните по карте, чтобы нарисовать линию' : 'Кликайте по карте — точки новой линии') : 'Выделите промежуток на трек-лайне')
     : S.tool === 'points' ? 'Тяните точки · «+» или клик у линии — добавить · двойной клик — удалить · стрелки — сдвиг'
     : (S.pts !== S.orig ? 'Пунктир — исходная геометрия, сплошная — текущая' : 'Сплошная — трек из файла · квадрат — старт, круг — финиш')
-      + (M.anoms.length ? ` · точки — разрывы сигнала (${M.anoms.length})` : '');
+      + (!M.anoms.length ? '' : show ? ` · оранжевым — выбросы (${M.anoms.length}), клик выделяет участок` : ` · точки — разрывы сигнала (${M.anoms.length})`);
   if (needFit) { needFit = false; requestAnimationFrame(() => map.fit(S.pts)); }
 }
 
@@ -613,6 +620,66 @@ function nudge(north, east, meters) {
     lat: p.lat + north * meters / 111320,
     lng: p.lng + east * meters / (111320 * Math.cos(p.lat * Math.PI / 180)),
   });
+}
+
+/* ───────────── outlier detection settings ───────────── */
+
+/** Re-run detection and pause-dependent stats after the config changed. */
+function applyDetect() {
+  if (S.pts) { S.ver++; recompute(); }
+  render();
+  updateCfgSummary();
+}
+
+const getPath = (o, path) => path.split('.').reduce((x, k) => x[k], o);
+function setPath(o, path, v) { const ks = path.split('.'), key = ks.pop(); ks.reduce((x, k) => x[k], o)[key] = v; }
+
+function markOffRules() {
+  for (const fs of $('cfgForm').querySelectorAll('[data-rule]')) fs.classList.toggle('is-off', !CFG[fs.dataset.rule].enabled);
+}
+
+function fillCfgForm() {
+  for (const el of $('cfgForm').elements) {
+    if (!el.name) continue;
+    const v = getPath(CFG, el.name);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  }
+  markOffRules();
+  updateCfgSummary();
+}
+
+/** Current config with the form applied; empty or negative numbers keep their previous value. */
+function readCfgForm() {
+  const next = JSON.parse(JSON.stringify(CFG));
+  for (const el of $('cfgForm').elements) {
+    if (!el.name) continue;
+    if (el.type === 'checkbox') setPath(next, el.name, el.checked);
+    else { const v = parseFloat(el.value); if (Number.isFinite(v) && v >= 0) setPath(next, el.name, v); }
+  }
+  return next;
+}
+
+function updateCfgSummary() {
+  $('cfgSummary').textContent = S.pts
+    ? `На текущем треке: выбросов — ${M.anoms.length}, пауз — ${M.pauses.length}`
+    : 'Откройте трек, чтобы сразу видеть результат.';
+}
+
+function bindConfig() {
+  const dlg = $('cfgDialog'), form = $('cfgForm');
+  const close = () => { dlg.hidden = true; };
+  $('btnCfg').addEventListener('click', () => { fillCfgForm(); dlg.hidden = false; form.querySelector('input').focus(); });
+  let timer = 0;
+  // Live apply; the form is not refilled while typing so a half-typed "0." is not rewritten.
+  form.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { setConfig(readCfgForm()); markOffRules(); applyDetect(); }, 150);
+  });
+  form.addEventListener('submit', e => { e.preventDefault(); close(); });
+  dlg.addEventListener('click', e => { if (e.target === dlg) close(); });
+  dlg.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  $('cfgReset').addEventListener('click', () => { resetConfig(); fillCfgForm(); applyDetect(); });
+  $('cfgExport').addEventListener('click', () => downloadFile(JSON.stringify(CFG, null, 2) + '\n', 'detect.json', 'application/json'));
 }
 
 /* ───────────── input ───────────── */
@@ -733,9 +800,10 @@ function bind() {
   $('btnSecondary').addEventListener('click', () => { const c = toolCfg(); if (c.sec && !c.secOff && !S.busy) c.secRun(); });
   $('btnUndo').addEventListener('click', undo);
   $('btnSelectAnomaly').addEventListener('click', selectAnomaly);
+  bindConfig();
 
   document.addEventListener('keydown', e => {
-    if (!S.pts || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
+    if (!S.pts || !$('cfgDialog').hidden || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
     if (S.tool === 'points' && S.active != null && !S.busy) {
       const dir = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
       if (dir) { e.preventDefault(); nudge(dir[0], dir[1], e.shiftKey ? 10 : 1); return; }
@@ -749,5 +817,7 @@ function bind() {
 }
 
 bind();
+render();                 // empty editor right away
+await loadConfig();       // detection rules from config/detect.json + this browser's tweaks
 if (new URLSearchParams(location.search).has('demo')) loadDemo();
 render();

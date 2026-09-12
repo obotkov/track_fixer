@@ -2,10 +2,10 @@
 // Points are plain objects { lat, lng, t(ms epoch), ele, hr, cad, pw, temp, fixed? }.
 // Edits never mutate a point in place — they return new arrays so history can share objects.
 
+// Shared thresholds; detect.js overwrites them from the detection config (config/detect.json).
 export const THRESH = {
   pauseKmh: 3,        // below this a segment counts as standing still
   anomalyKmh: 65,     // above this a segment is a GPS glitch, not riding
-  jumpM: 250,         // a single segment longer than this is a signal-loss jump
   minPauseSec: 5,
 };
 
@@ -123,28 +123,6 @@ export function medianSpacing(D) {
   if (!arr.length) return 5;
   arr.sort((a, b) => a - b);
   return arr[arr.length >> 1];
-}
-
-/** Runs of impossible speed or single long jumps. Each run is [a, b] with good anchor points at both ends. */
-export function findAnomalies(pts, D) {
-  const jump = Math.max(THRESH.jumpM, medianSpacing(D) * 25), runs = [];
-  let cur = null;
-  for (let i = 1; i < D.n; i++) {
-    const len = D.d[i] - D.d[i - 1], v = D.seg[i];
-    if (!((v > THRESH.anomalyKmh && len > 5) || len > jump)) continue;
-    if (cur && i - cur.last <= 4) cur.last = i;
-    else { cur = { first: i, last: i }; runs.push(cur); }
-  }
-  return runs.map(r => {
-    let maxV = 0, maxLen = 0;
-    for (let i = r.first; i <= r.last; i++) {
-      const v = D.seg[i];
-      if (Number.isFinite(v) && v > maxV) maxV = v;
-      maxLen = Math.max(maxLen, D.d[i] - D.d[i - 1]);
-    }
-    const a = r.first - 1, b = r.last;
-    return { a, b, kind: maxV > THRESH.anomalyKmh ? 'speed' : 'jump', maxV, maxLen };
-  });
 }
 
 export function findPauses(pts, D) {

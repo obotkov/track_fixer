@@ -1,5 +1,5 @@
 // Leaflet map: the track on a canvas renderer (fast for 50k+ points), overlays on SVG above it.
-const C = { track: '#416180', dark: '#1d2d3d', ghost: '#98989b', partB: '#7a7a7d', sel: '#e0322b', paper: '#ffffff' };
+const C = { track: '#416180', dark: '#1d2d3d', ghost: '#98989b', partB: '#7a7a7d', sel: '#e0322b', out: '#f08c00', paper: '#ffffff' };
 const ll = p => [p.lat, p.lng];
 
 export class MapView {
@@ -14,6 +14,9 @@ export class MapView {
     }).addTo(this.map);
     this.map.createPane('tfTop').style.zIndex = 450;
     this.top = L.svg({ pane: 'tfTop' });
+    this.map.createPane('tfOut').style.zIndex = 440;   // detected outliers: above the track, below selection
+    this.outR = L.svg({ pane: 'tfOut' });
+    this.outL = L.layerGroup().addTo(this.map);
     this.base = L.layerGroup().addTo(this.map);
     this.selL = L.layerGroup().addTo(this.map);
     this.draftL = L.layerGroup().addTo(this.map);
@@ -42,7 +45,7 @@ export class MapView {
       html: '<div class="tf-sq' + (dark ? ' is-dark' : '') + (draggable ? ' is-drag' : '') + '"></div>' });
   }
 
-  setBase({ pts, orig, partB, ghost, gaps = [] }) {
+  setBase({ pts, orig, partB, ghost, gaps = [], dotGaps = true }) {
     const L = this.L, g = this.base, off = { interactive: false };
     g.clearLayers();
     if (ghost) L.polyline(orig.map(ll), { ...off, color: C.ghost, weight: 2, dashArray: '5 5' }).addTo(g);
@@ -57,7 +60,8 @@ export class MapView {
     }
     solid.push(pts.slice(start).map(ll));
     L.polyline(solid, { ...off, color: C.track, weight: 4 }).addTo(g);
-    if (dotted.length) L.polyline(dotted, { ...off, color: C.dark, weight: 3, dashArray: '1 7', lineCap: 'round' }).addTo(g);
+    // With outliers highlighted (setOutliers) the glitch geometry is drawn there instead.
+    if (dotGaps && dotted.length) L.polyline(dotted, { ...off, color: C.dark, weight: 3, dashArray: '1 7', lineCap: 'round' }).addTo(g);
     // Edited stretches are drawn darker, joined to their neighbours.
     const runs = [];
     let run = null;
@@ -70,6 +74,29 @@ export class MapView {
     runs.forEach(r => L.polyline(r, { ...off, color: C.dark, weight: 5 }).addTo(g));
     L.marker(ll(pts[0]), { icon: this.sq(true), interactive: false }).addTo(g);
     L.circleMarker(ll(pts[pts.length - 1]), { ...off, radius: 6, color: C.dark, weight: 2.5, fill: false }).addTo(g);
+  }
+
+  /**
+   * Detected outliers in orange: a halo plus a dashed line over each stretch and a dot on every point
+   * inside it. Hover shows the reason; click picks the stretch (only when `interactive`, so the
+   * redraw and points tools can click through to the map).
+   */
+  setOutliers(pts, runs, labels, onPick, interactive) {
+    const L = this.L, g = this.outL;
+    g.clearLayers();
+    if (!runs) return;
+    const o = { renderer: this.outR, interactive, bubblingMouseEvents: false };
+    let dots = 0;
+    runs.forEach((r, k) => {
+      const line = pts.slice(r.a, r.b + 1).map(ll);
+      for (const style of [{ weight: 12, opacity: 0.28, lineCap: 'round' }, { weight: 3, dashArray: '6 5' }]) {
+        const l = L.polyline(line, { ...o, color: C.out, ...style }).addTo(g);
+        if (interactive) l.bindTooltip(labels[k], { sticky: true }).on('click', () => onPick(k));
+      }
+      for (let i = r.a + 1; i < r.b && dots < 3000; i++, dots++) {
+        L.circleMarker(ll(pts[i]), { renderer: this.outR, interactive: false, radius: 3.5, color: C.paper, weight: 1.5, fillColor: C.out, fillOpacity: 1 }).addTo(g);
+      }
+    });
   }
 
   setSel(pts, sp) {

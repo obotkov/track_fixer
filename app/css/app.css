@@ -51,6 +51,24 @@ a:hover { color: var(--color-accent-700); }
 @media (max-width: 760px) { .side { max-width: none; } }
 .panel { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
 .panel h6 { margin: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.btn-sm { padding: 2px 8px; font-size: 12px; }
+
+/* — outlier detection settings — */
+.dialog-backdrop { z-index: 2000; }
+/* The design system draws dialogs as transparent frames; over a live map it needs a solid sheet. */
+.cfg { width: min(580px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--color-bg); box-shadow: var(--shadow-lg); }
+.cfg .dialog-body { margin: 0; font-size: 13px; }
+.cfg code { font-size: 12px; }
+.cfg-check, .cfg-rule legend label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.cfg-check input, .cfg-rule legend input { width: 16px; height: 16px; margin: 0; accent-color: var(--color-accent); }
+.cfg-check { font-size: 14px; }
+.cfg-rule { margin: 0; padding: var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--color-divider); display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2) var(--space-3); }
+.cfg-rule legend { padding: 0 var(--space-1); font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
+.cfg-rule .field span { display: block; font-size: 12px; margin-bottom: 4px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.cfg-rule .small { grid-column: 1 / -1; }
+.cfg-rule.is-off .field { opacity: .45; }
+.cfg-summary { font-size: 13px; color: var(--color-accent-700); min-height: 18px; }
 .panel-text { font-size: 13px; line-height: 1.4; }
 .small { font-size: 11px; margin: 0; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px var(--space-3); font-size: 13px; font-variant-numeric: tabular-nums; }

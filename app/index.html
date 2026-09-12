@@ -73,7 +73,10 @@
       <aside class="side">
         <div class="blueprint panel">
           <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-          <h6>Диагностика</h6>
+          <div class="panel-head">
+            <h6>Диагностика</h6>
+            <button class="btn btn-ghost btn-sm" id="btnCfg" type="button" title="Правила автоматического поиска выбросов">Настроить</button>
+          </div>
           <div id="diagAnomaly" style="display:flex;flex-direction:column;gap:var(--space-2)" hidden>
             <span class="panel-text" id="anomalyText"></span>
             <span class="text-muted small" id="anomalyRange"></span>
@@ -191,6 +194,50 @@
       <div class="toast" id="toast" aria-live="polite"></div>
     </section>
   </main>
+
+  <!-- Outlier detection settings. Inputs are bound to config keys by their name ("speed.maxKmh"). -->
+  <div class="dialog-backdrop" id="cfgDialog" hidden>
+    <form class="dialog cfg" id="cfgForm" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
+      <div class="dialog-title" id="cfgTitle">Автопоиск выбросов</div>
+      <p class="dialog-body text-muted">Правила, по которым трек проверяется автоматически. Изменения применяются сразу и сохраняются в этом браузере; значения по умолчанию — в <code>config/detect.json</code>.</p>
+
+      <label class="cfg-check"><input type="checkbox" name="showOnMap">Выделять выбросы на карте</label>
+
+      <fieldset class="cfg-rule" data-rule="speed">
+        <legend><label><input type="checkbox" name="speed.enabled">Скорость</label></legend>
+        <label class="field"><span>Порог, км/ч</span><input class="input" type="number" name="speed.maxKmh" min="10" max="1000" step="1"></label>
+        <p class="small text-muted">Отрезок между соседними точками быстрее порога — телепорт или потеря сигнала.</p>
+      </fieldset>
+
+      <fieldset class="cfg-rule" data-rule="jump">
+        <legend><label><input type="checkbox" name="jump.enabled">Скачок</label></legend>
+        <label class="field"><span>Длиннее, м</span><input class="input" type="number" name="jump.maxM" min="10" max="100000" step="10"></label>
+        <label class="field"><span>или × типичного шага</span><input class="input" type="number" name="jump.vsMedian" min="2" max="1000" step="1"></label>
+        <p class="small text-muted">Один шаг между точками намного длиннее обычного — запись прервалась и продолжилась в другом месте.</p>
+      </fieldset>
+
+      <fieldset class="cfg-rule" data-rule="spike">
+        <legend><label><input type="checkbox" name="spike.enabled">Острый выброс</label></legend>
+        <label class="field"><span>Отлёт больше, м</span><input class="input" type="number" name="spike.minM" min="3" max="10000" step="1"></label>
+        <label class="field"><span>Угол при точке меньше, °</span><input class="input" type="number" name="spike.maxAngleDeg" min="5" max="120" step="5"></label>
+        <p class="small text-muted">Точка улетает в сторону и сразу возвращается — трек рисует острую «V». Обычные повороты ближе к 90°. Ловит выбросы на обычной скорости и при редкой записи.</p>
+      </fieldset>
+
+      <fieldset class="cfg-rule">
+        <legend>Участки и паузы</legend>
+        <label class="field"><span>Склеивать через ≤ точек</span><input class="input" type="number" name="mergeGapPoints" min="0" max="100" step="1"></label>
+        <label class="field"><span>Пауза: медленнее, км/ч</span><input class="input" type="number" name="pause.maxKmh" min="0" max="20" step="0.5"></label>
+        <label class="field"><span>Пауза: дольше, с</span><input class="input" type="number" name="pause.minSec" min="0" max="3600" step="1"></label>
+      </fieldset>
+
+      <div class="cfg-summary" id="cfgSummary" aria-live="polite"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="cfgReset">Сбросить</button>
+        <button type="button" class="btn btn-secondary" id="cfgExport">Скачать JSON</button>
+        <button type="submit" class="btn btn-primary">Готово</button>
+      </div>
+    </form>
+  </div>
 </div>
 </body>
 </html>
