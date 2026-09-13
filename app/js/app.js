@@ -134,9 +134,12 @@ function loadTrack(r, fileName) {
   });
   recompute();
   M.origDist = M.stats.dist;
+  // Start on the first detected stretch, so "Участок 1 из N" is what is highlighted and the arrows go on from it.
+  if (M.anoms.length) S.sel = { a: M.anoms[0].a, b: M.anoms[0].b };
   const sensors = ['скорость', r.has.ele && 'высота', r.has.hr && 'пульс', r.has.pw && 'мощность', r.has.cad && 'каденс', r.has.temp && 'температура'].filter(Boolean);
   S.toast = `Файл разобран (${r.format}): 1 трек, ${S.pts.length} точек, ${km(M.stats.dist)} км, датчики: ${sensors.join(', ')}`
-    + (r.has.time ? '' : ' · в файле нет времени — оно рассчитано для 20 км/ч');
+    + (r.has.time ? '' : ' · в файле нет времени — оно рассчитано для 20 км/ч')
+    + (M.anoms.length ? ` · выделен участок 1 из ${M.anoms.length}` : '');
   setUploadMsg('');
   needFit = true;
   render();
