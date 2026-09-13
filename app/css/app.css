@@ -15,6 +15,16 @@ a:hover { color: var(--color-accent-700); }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .topbar-actions .tag { font-family: var(--font-body); max-width: 36ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* — export menu — */
+.export { position: relative; }
+.export-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 1600; width: min(340px, 90vw); display: flex; flex-direction: column; background: var(--color-bg); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg); }
+.export-menu button { display: flex; flex-direction: column; gap: 1px; padding: var(--space-2) var(--space-3); text-align: left; font: inherit; color: var(--color-text); background: transparent; border: 0; cursor: pointer; }
+.export-menu button + button { border-top: 1px solid var(--color-divider); }
+.export-menu button:hover, .export-menu button:focus-visible { background: var(--color-accent-100); outline: none; }
+.export-menu b { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
+.export-menu span { font-size: 12px; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+.export-menu .is-last b::after { content: " · последний"; font-family: var(--font-body); font-weight: 400; font-size: 11px; color: var(--color-accent-700); }
+
 /* — empty state / drop target over the map — */
 .map-wrap { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; }
 .map-empty { position: absolute; inset: 0; z-index: 1100; display: grid; place-items: center; padding: var(--space-4); background: color-mix(in srgb, var(--color-bg) 72%, transparent); }

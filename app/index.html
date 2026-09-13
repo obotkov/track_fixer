@@ -21,7 +21,17 @@
     <div class="topbar-actions">
       <span class="tag tag-neutral" id="fileName">файл не выбран</span>
       <button class="btn btn-secondary" id="btnOther" type="button">Открыть файл</button>
-      <button class="btn btn-primary" id="btnExport" type="button" disabled>Экспорт</button>
+      <div class="export" id="exportWrap">
+        <button class="btn btn-primary" id="btnExport" type="button" disabled aria-haspopup="menu" aria-expanded="false">
+          Экспорт
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        <div class="export-menu" id="exportMenu" role="menu" hidden>
+          <button type="button" role="menuitem" data-fmt="gpx"><b>GPX</b><span>Strava, Komoot, Garmin Connect и почти все сервисы</span></button>
+          <button type="button" role="menuitem" data-fmt="tcx"><b>TCX</b><span>Garmin Connect, TrainingPeaks — с пульсом, каденсом, мощностью и сводкой круга</span></button>
+          <button type="button" role="menuitem" data-fmt="fit"><b>FIT</b><span>формат устройств Garmin и iGPSport; Strava и Garmin Connect принимают как запись с устройства</span></button>
+        </div>
+      </div>
     </div>
   </header>
 

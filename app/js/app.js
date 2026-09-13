@@ -7,7 +7,7 @@ import {
 import { parseTrackFile } from './parsers.js';
 import { CFG, loadConfig, setConfig, resetConfig, findAnomalies, describe, shortLabel } from './detect.js';
 import { routeByBike, fetchElevations } from './services.js';
-import { toGPX, downloadFile } from './exporter.js';
+import { FORMATS, buildExport, downloadFile } from './exporter.js';
 import { buildDemoRaw } from './demo.js';
 import { buildChart, xOf } from './chart.js';
 import { MapView } from './mapview.js';
@@ -239,9 +239,15 @@ function applyShift() {
   });
 }
 
-function exportGPX(pts, has, suffix) {
-  const name = S.baseName + suffix + '.gpx';
-  downloadFile(toGPX(pts, { name: S.trackName, has }), name);
+const EXPORT_KEY = 'trackfix.export';
+const lastFormat = () => { try { return FORMATS[localStorage.getItem(EXPORT_KEY)] ? localStorage.getItem(EXPORT_KEY) : 'gpx'; } catch { return 'gpx'; } };
+
+/** Download pts as GPX / TCX / FIT; the choice is remembered for the next export. */
+function exportAs(fmt, pts, has, suffix) {
+  const f = FORMATS[fmt] || FORMATS.gpx, name = S.baseName + suffix + '.' + f.ext;
+  const kcal = pts === S.pts ? (M.stats.kcal ?? S.fileSum?.calories ?? null) : null;
+  downloadFile(buildExport(fmt, pts, { name: S.trackName, has, kcal }), name, f.mime);
+  try { localStorage.setItem(EXPORT_KEY, fmt); } catch { /* storage blocked */ }
   const dist = pts === S.pts ? M.stats.dist : derive(pts).d[pts.length - 1];
   toast(`${name} готов · ${pts.length} точек · ${km(dist)} км`);
 }
@@ -284,7 +290,8 @@ function toolCfg() {
     case 'split': return { title: 'Разделить трек', hint: 'Точка разделения — начало выделения. Часть B откладывается и показывается пунктиром; её можно скачать отдельно.',
       primary: 'Разделить здесь', off: !has || sp.a < 1,
       run: () => { const r = splitAt(S.pts, sp.a); commit(r.head, { partB: r.tail, partBHas: S.has, sel: null, toast: 'Трек разделён · часть B отложена (пунктир на карте)' }); },
-      sec: S.partB ? 'Скачать часть B' : null, secOff: false, secRun: () => exportGPX(S.partB, S.partBHas || S.has, '_part_b') };
+      sec: S.partB ? `Скачать часть B (${FORMATS[lastFormat()].label})` : null, secOff: false,
+      secRun: () => exportAs(lastFormat(), S.partB, S.partBHas || S.has, '_part_b') };
     case 'merge': return { title: 'Склеить два трека',
       hint: S.partB ? 'Часть B будет присоединена к концу текущего трека, время продолжится непрерывно.' : 'Нет отложенной части. Разделите трек или загрузите второй файл.',
       primary: 'Присоединить часть B', off: !S.partB,
@@ -842,7 +849,22 @@ function bind() {
   $('fileInput2').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; openSecondFile(f); });
   $('btnDemo').addEventListener('click', loadDemo);
   $('btnOther').addEventListener('click', pick);
-  $('btnExport').addEventListener('click', () => exportGPX(S.pts, S.has, '_fixed'));
+  // Export menu: GPX / TCX / FIT; the last used format is marked.
+  const menu = $('exportMenu'), exp = $('btnExport');
+  const setMenu = open => {
+    menu.hidden = !open;
+    exp.setAttribute('aria-expanded', String(open));
+    if (open) for (const b of menu.querySelectorAll('[data-fmt]')) b.classList.toggle('is-last', b.dataset.fmt === lastFormat());
+  };
+  exp.addEventListener('click', e => { e.stopPropagation(); setMenu(menu.hidden); });
+  menu.addEventListener('click', e => {
+    const b = e.target.closest('[data-fmt]');
+    if (!b || !S.pts) return;
+    setMenu(false);
+    exportAs(b.dataset.fmt, S.pts, S.has, '_fixed');
+  });
+  document.addEventListener('click', e => { if (!menu.hidden && !e.target.closest('#exportWrap')) setMenu(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) setMenu(false); });
 
   // Drop a file anywhere on the page; while it is dragged, the map shows the drop target.
   let depth = 0;
