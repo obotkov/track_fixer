@@ -291,13 +291,17 @@ function toolCfg() {
   }
 }
 
-/** Select detected stretch k (from the diagnostics button or a click on the map) and open redraw. */
+/**
+ * Select detected stretch k (diagnostics arrows / button, or a click on the map). The current tool is
+ * kept so stepping through stretches doesn't switch it; a pending redraw line belongs to the old
+ * stretch and is dropped.
+ */
 function selectRun(k) {
   const r = M.anoms[k];
   if (!r) return;
-  Object.assign(S, { anomIdx: k, sel: { a: r.a, b: r.b }, hover: r.a, tool: 'redraw', draft: [], active: null,
-    toast: describe(r) + ' Участок выделен — вырежьте его или перерисуйте по карте.' });
-  if (map) map.showRange(S.pts, r);
+  Object.assign(S, { anomIdx: k, sel: { a: r.a, b: r.b }, hover: r.a, draft: [], active: null,
+    toast: describe(r) + ' Участок выделен.' });
+  if (map) map.showRange(S.pts, r, S.tool === 'points' ? 18 : 17);
   render();
 }
 
