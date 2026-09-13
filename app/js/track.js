@@ -36,24 +36,34 @@ function fillLinear(pts, key) {
 }
 
 /** Clean parsed points: drop invalid coordinates and duplicates, fill gaps in time and elevation. */
+/**
+ * Split parsed records into track points (with coordinates) and position-less samples: during a GPS
+ * gap the device keeps recording time, speed, odometer, heart rate and altitude — redraw uses them.
+ * `dist` is the device odometer (m), `spd` the device speed (km/h), both optional.
+ */
 export function normalize(raw) {
-  const pts = [];
+  const pts = [], samples = [];
   for (const p of raw) {
-    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
-    if (Math.abs(p.lat) > 90 || Math.abs(p.lng) > 180 || (p.lat === 0 && p.lng === 0)) continue;
     const q = { lat: p.lat, lng: p.lng, t: Number.isFinite(p.t) ? p.t : null,
-      ele: num(p.ele), hr: num(p.hr), cad: num(p.cad), pw: num(p.pw), temp: num(p.temp) };
+      ele: num(p.ele), hr: num(p.hr), cad: num(p.cad), pw: num(p.pw), temp: num(p.temp), dist: num(p.dist), spd: num(p.spd) };
+    const located = Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 && !(p.lat === 0 && p.lng === 0);
+    if (!located) {
+      if (q.t != null) { delete q.lat; delete q.lng; samples.push(q); }
+      continue;
+    }
     const last = pts[pts.length - 1];
     if (last && last.lat === q.lat && last.lng === q.lng && last.t === q.t) continue;
     pts.push(q);
   }
   if (pts.length < 2) throw new Error('В файле нет трека: найдено меньше двух точек с координатами.');
+  samples.sort((x, y) => x.t - y.t);
 
   const has = { time: false, ele: false, hr: false, cad: false, pw: false, temp: false };
   for (const p of pts) {
     if (p.t != null) has.time = true;
     for (const c of CHANNELS) if (p[c] != null) has[c] = true;
   }
+  for (const s of samples) for (const c of ['hr', 'cad', 'pw', 'temp']) if (s[c] != null) has[c] = true;
   if (has.ele) fillLinear(pts, 'ele'); else pts.forEach(p => { p.ele = 0; });
   if (has.time) {
     fillLinear(pts, 't');
@@ -64,7 +74,7 @@ export function normalize(raw) {
     pts[0].t = t;
     for (let i = 1; i < pts.length; i++) { t += hav(pts[i - 1], pts[i]) / (20 / 3.6) * 1000; pts[i].t = Math.round(t); }
   }
-  return { pts, has };
+  return { pts, has, samples };
 }
 
 /** Per-point series derived from geometry and time. */
@@ -192,13 +202,25 @@ export function smoothRange(pts, a, b, win) {
 
 /** Drop standing-still points and collapse their time so the ride reads as continuous. */
 export function dropPauses(pts, D) {
-  const out = [pts[0]];
+  const out = [pts[0]], gaps = [];
   let offset = 0, removed = 0;
   for (let i = 1; i < D.n; i++) {
-    if (D.seg[i] < THRESH.pauseKmh) { offset += pts[i].t - pts[i - 1].t; removed++; continue; }
+    if (D.seg[i] < THRESH.pauseKmh) { offset += pts[i].t - pts[i - 1].t; removed++; gaps.push([pts[i - 1].t, pts[i].t]); continue; }
     out.push(offset ? { ...pts[i], t: pts[i].t - offset } : pts[i]);
   }
-  return { pts: out, removed, savedSec: offset / 1000 };
+  return { pts: out, removed, savedSec: offset / 1000, gaps };
+}
+
+/** Position-less samples after dropPauses: those inside a removed interval go, the rest move back in time. */
+export function collapseSamples(samples, gaps) {
+  const out = [];
+  let k = 0, off = 0;
+  for (const s of samples) {
+    while (k < gaps.length && gaps[k][1] <= s.t) { off += gaps[k][1] - gaps[k][0]; k++; }
+    if (k < gaps.length && gaps[k][0] < s.t) continue;
+    out.push(off ? { ...s, t: s.t - off } : s);
+  }
+  return out;
 }
 
 /** Position of ll projected onto segment A→B: fraction u (0..1) and squared distance in local degrees. */
@@ -277,27 +299,92 @@ export function resamplePath(path, spacing) {
   return { pts: res, L };
 }
 
+const VALUES = [...CHANNELS, 'dist', 'spd'];
+
+function pathCum(path) {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + hav(path[i - 1], path[i]));
+  return cum;
+}
+
+/** Position at distance s (m) along a polyline with cumulative lengths cum. */
+function pointAt(path, cum, s) {
+  let lo = 1, hi = path.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < s) lo = m + 1; else hi = m; }
+  const s0 = cum[lo - 1], s1 = cum[lo], u = s1 > s0 ? Math.min(1, Math.max(0, (s - s0) / (s1 - s0))) : 0;
+  return { lat: path[lo - 1].lat + (path[lo].lat - path[lo - 1].lat) * u, lng: path[lo - 1].lng + (path[lo].lng - path[lo - 1].lng) * u };
+}
+
+/**
+ * Everything recorded between anchors a and b — old in-between points (their position may be wrong,
+ * their time and sensors are real) and position-less samples — in time order, each with its progress
+ * 0..1 through the stretch: by device odometer if every record has it, else by integrated device
+ * speed, else by time.
+ */
+function recordedTimeline(pts, a, b, samples) {
+  const A = pts[a], B = pts[b], items = [A], seen = new Set();
+  for (let i = a + 1; i < b; i++) { items.push(pts[i]); seen.add(pts[i].t); }
+  for (const s of samples) if (s.t > A.t && s.t < B.t && !seen.has(s.t)) items.push(s);
+  items.push(B);
+  items.sort((x, y) => x.t - y.t);
+  const n = items.length, p = new Float64Array(n), dt = B.t - A.t;
+  let mode = 'time';
+  if (items.every(x => Number.isFinite(x.dist)) && B.dist - A.dist > 1) {
+    mode = 'dist';
+    for (let k = 1; k < n; k++) p[k] = Math.min(1, Math.max(p[k - 1], (items[k].dist - A.dist) / (B.dist - A.dist)));
+  } else if (items.filter(x => Number.isFinite(x.spd)).length >= 0.8 * n && dt > 0) {
+    let run = 0;
+    for (let k = 1; k < n; k++) { run += ((items[k - 1].spd ?? 0) + (items[k].spd ?? 0)) / 2 / 3.6 * (items[k].t - items[k - 1].t) / 1000; p[k] = run; }
+    if (run > 0) { mode = 'speed'; for (let k = 1; k < n; k++) p[k] /= run; }
+  }
+  if (mode === 'time') for (let k = 1; k < n; k++) p[k] = dt > 0 ? (items[k].t - A.t) / dt : k / (n - 1);
+  p[n - 1] = 1;
+  return { items, p, mode };
+}
+
 /**
  * Replace points strictly between anchors a and b with a new path (which starts at a and ends at b).
- * Time runs from a to b in proportion to distance. Sensors are either stretched from the original
- * segment (glitch points skipped) or interpolated between the anchors.
+ * 'stretch': the data recorded between the anchors is laid along the new path by distance covered
+ * (see recordedTimeline): each record keeps its own time, speed profile, heart rate and altitude, and
+ * where records are sparser than `spacing` extra points are interpolated so the path keeps its shape.
+ * 'interp': time in proportion to distance, sensors linear between the anchors.
  */
-export function replaceGeometry(pts, D, a, b, path, policy, spacing) {
+export function replaceGeometry(pts, D, a, b, path, policy, spacing, samples = []) {
   const A = pts[a], B = pts[b];
-  const { pts: geo, L } = resamplePath(path, spacing);
-  const src = [];
-  for (let i = a; i <= b; i++) if (i === a || D.seg[i] <= THRESH.anomalyKmh) src.push(pts[i]);
-  const mid = [];
-  for (let j = 1; j < geo.length - 1; j++) {
-    const u = L > 0 ? geo[j].s / L : j / (geo.length - 1);
-    const q = { lat: geo[j].lat, lng: geo[j].lng, t: Math.round(A.t + (B.t - A.t) * u), fixed: true };
-    if (policy === 'stretch' && src.length > 1) {
-      const s = src[Math.round(u * (src.length - 1))];
-      for (const c of CHANNELS) q[c] = s[c];
-    } else for (const c of CHANNELS) q[c] = lerp(A[c], B[c], u);
-    mid.push(q);
+  if (policy !== 'stretch') {
+    const { pts: geo, L } = resamplePath(path, spacing), mid = [];
+    for (let j = 1; j < geo.length - 1; j++) {
+      const u = L > 0 ? geo[j].s / L : j / (geo.length - 1);
+      const q = { lat: geo[j].lat, lng: geo[j].lng, t: Math.round(A.t + (B.t - A.t) * u), fixed: true };
+      for (const c of CHANNELS) q[c] = lerp(A[c], B[c], u);
+      mid.push(q);
+    }
+    return { pts: pts.slice(0, a + 1).concat(mid, pts.slice(b)), added: mid.length, L, used: 0, mode: 'interp' };
   }
-  return { pts: pts.slice(0, a + 1).concat(mid, pts.slice(b)), added: mid.length, L };
+  const cum = pathCum(path), L = cum[cum.length - 1], tl = recordedTimeline(pts, a, b, samples), out = [];
+  // Filler points only keep the road's shape where nothing was recorded; every 40 m is enough and
+  // keeps invented points from outnumbering real ones (the track-line is drawn by point index).
+  const fill = Math.max(spacing, 40);
+  const make = (v, u) => {
+    const q = { ...pointAt(path, cum, u * L), t: Math.round(v.t), fixed: true };
+    for (const c of VALUES) q[c] = v[c] ?? null;
+    if (q.ele == null) q.ele = A.ele + (B.ele - A.ele) * u;
+    return q;
+  };
+  for (let k = 0; k < tl.items.length - 1; k++) {
+    const x = tl.items[k], y = tl.items[k + 1], px = tl.p[k], py = tl.p[k + 1];
+    if (k > 0) out.push(make(x, px));
+    const gap = (py - px) * L;
+    if (gap > 1.5 * fill) {
+      const cnt = Math.round(gap / fill);
+      for (let j = 1; j < cnt; j++) {
+        const f = j / cnt, v = { t: x.t + (y.t - x.t) * f };
+        for (const c of VALUES) v[c] = lerp(x[c], y[c], f);
+        out.push(make(v, px + (py - px) * f));
+      }
+    }
+  }
+  return { pts: pts.slice(0, a + 1).concat(out, pts.slice(b)), added: out.length, L, used: tl.items.length - 2, mode: tl.mode };
 }
 
 /**

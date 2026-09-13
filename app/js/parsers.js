@@ -24,8 +24,8 @@ export async function parseTrackFile(file) {
     else throw new Error('Неизвестный формат. Поддерживаются GPX, FIT и TCX.');
   }
   if (!raw.length) throw new Error('В файле не найдено ни одной точки трека.');
-  const { pts, has } = normalize(raw);
-  return { pts, has, name, format, summary };
+  const { pts, has, samples } = normalize(raw);
+  return { pts, has, name, format, summary, samples };
 }
 
 /* ───────────── XML ───────────── */
@@ -85,6 +85,9 @@ function parseTCX(doc) {
     if (hr) p.hr = fl(txt(hr, 'Value'));
     const w = txt(tp, 'Watts');
     if (w != null) p.pw = fl(w);
+    p.dist = fl(txt(tp, 'DistanceMeters'));
+    const v = txt(tp, 'Speed');
+    if (v != null) p.spd = fl(v) * 3.6;
     raw.push(p);
   }
   return raw;
@@ -188,6 +191,9 @@ function readFitRecords(dv, u8, pos, end, raw, summary) {
       lat: rec[0] != null ? rec[0] * SEMI : null, lng: rec[1] != null ? rec[1] * SEMI : null,
       t: ts != null ? FIT_EPOCH + ts * 1000 : null, ele: alt,
       hr: rec[3] ?? null, cad: rec[4] ?? null, pw: rec[7] ?? null, temp: rec[13] ?? null,
+      // odometer (5, cm) and speed (73 enhanced / 6, mm/s): kept also for records without a GPS fix
+      dist: rec[5] != null ? rec[5] / 100 : null,
+      spd: rec[73] != null ? rec[73] / 1000 * 3.6 : rec[6] != null ? rec[6] / 1000 * 3.6 : null,
     });
   }
 }

@@ -1,7 +1,7 @@
 // TrackFix UI controller: one state object, a rAF-batched render, memoised heavy parts.
 import {
   THRESH, derive, trackStats, findPauses, kmSplits, medianSpacing, normalize, hav,
-  cutRange, keepRange, dropHead, splitAt, mergeTracks, smoothRange, dropPauses, shiftTime,
+  cutRange, keepRange, dropHead, splitAt, mergeTracks, smoothRange, dropPauses, collapseSamples, shiftTime,
   insertPoint, insertAt, dragShift, dragPoint, removePoint, dropOutliers, replaceGeometry, applyElevation,
 } from './track.js';
 import { parseTrackFile } from './parsers.js';
@@ -26,6 +26,7 @@ const S = {
   toast: '', busy: false, anomIdx: 0,
   active: null,       // point index picked in the points tool
   approved: [],       // stretches marked OK: [{ a: {lat, lng}, b: {lat, lng} }] — anchor coordinates survive edits
+  samples: [],        // records without a GPS fix (time, speed, odometer, HR, altitude), used by redraw
 };
 let D = null, map = null, needFit = false, freeDrawing = false, EM = null;
 let tip = null;   // cursor position for the hover mini summary: { x, y, src: 'map' | 'chart' }
@@ -68,7 +69,7 @@ function recompute() {
 
 function commit(pts, extra = {}) {
   if (pts.length < 2) { S.toast = 'После правки осталось бы меньше двух точек — действие отменено.'; render(); return; }
-  S.history.push({ pts: S.pts, partB: S.partB, partBHas: S.partBHas, has: S.has });
+  S.history.push({ pts: S.pts, partB: S.partB, partBHas: S.partBHas, has: S.has, samples: S.samples });
   if (S.history.length > 60) S.history.shift();
   S.pts = pts; S.ver++; S.draft = [];
   Object.assign(S, extra);
@@ -79,7 +80,7 @@ function commit(pts, extra = {}) {
 function undo() {
   const h = S.history.pop();
   if (!h || S.busy) return;
-  Object.assign(S, { pts: h.pts, partB: h.partB, partBHas: h.partBHas, has: h.has, sel: null, draft: [], active: null, toast: 'Последнее действие отменено' });
+  Object.assign(S, { pts: h.pts, partB: h.partB, partBHas: h.partBHas, has: h.has, samples: h.samples ?? S.samples, sel: null, draft: [], active: null, toast: 'Последнее действие отменено' });
   S.ver++;
   recompute();
   render();
@@ -132,7 +133,7 @@ function loadTrack(r, fileName) {
   // at 0 made a freshly opened file hit the previous track's cache and leave it on screen.
   Object.assign(S, {
     fileName, baseName: base, trackName: r.name || base, format: r.format,
-    pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null, fileSum: r.summary || {},
+    pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null, fileSum: r.summary || {}, samples: r.samples || [],
     ver: S.ver + 1, sel: null, dragging: null, dragEdge: false, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false, approved: [],
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
@@ -143,6 +144,7 @@ function loadTrack(r, fileName) {
   const sensors = ['скорость', r.has.ele && 'высота', r.has.hr && 'пульс', r.has.pw && 'мощность', r.has.cad && 'каденс', r.has.temp && 'температура'].filter(Boolean);
   S.toast = `Файл разобран (${r.format}): 1 трек, ${S.pts.length} точек, ${km(M.stats.dist)} км, датчики: ${sensors.join(', ')}`
     + (r.has.time ? '' : ' · в файле нет времени — оно рассчитано для 20 км/ч')
+    + (S.samples.length ? ` · ${S.samples.length} записей без GPS сохранены для перерисовки` : '')
     + (M.anoms.length ? ` · выделен участок 1 из ${M.anoms.length}` : '');
   setUploadMsg('');
   needFit = true;
@@ -187,13 +189,15 @@ async function applyRedraw() {
     if (S.ver !== ver0) { render(); return; }
   }
   const spacing = Math.min(50, Math.max(3, medianSpacing(D0)));
-  const r = replaceGeometry(pts, D0, sp.a, sp.b, path, S.pp, spacing);
+  const r = replaceGeometry(pts, D0, sp.a, sp.b, path, S.pp, spacing, S.samples);
   const dt = (B.t - A.t) / 1000, v = dt > 0 ? r.L / dt * 3.6 : 0;
+  const how = r.mode === 'interp' ? 'параметры интерполированы по краям'
+    : r.used ? `записанные данные интервала (${r.used} отсчётов: время, скорость, пульс, высота) растянуты по `
+      + (r.mode === 'dist' ? 'километражу устройства' : r.mode === 'speed' ? 'скорости устройства' : 'времени')
+    : 'между краями не было записей — время и датчики распределены равномерно';
   commit(r.pts, {
     sel: null,
-    toast: `Геометрия заменена: ${r.added} точек, ${km(r.L)} км · ${note} · `
-      + (S.pp === 'stretch' ? 'исходные параметры растянуты по новой длине' : 'параметры интерполированы по краям')
-      + (v ? ` · средняя на участке ${v.toFixed(1)} км/ч` : ''),
+    toast: `Геометрия заменена: ${r.added} точек, ${km(r.L)} км · ${note} · ${how}` + (v ? ` · средняя на участке ${v.toFixed(1)} км/ч` : ''),
   });
 }
 
@@ -230,6 +234,7 @@ function applyShift() {
   if (!delta) { toast('Старт уже такой'); return; }
   const mins = Math.round(Math.abs(delta) / 60000);
   commit(shiftTime(S.pts, delta), {
+    samples: S.samples.map(s => ({ ...s, t: s.t + delta })),
     toast: `Старт записи сдвинут на ${new Date(t).toLocaleString('ru-RU')} · ${delta > 0 ? '+' : '−'}${mins >= 60 ? fmtDur(mins * 60) : mins + ' мин'}`,
   });
 }
@@ -293,7 +298,7 @@ function toolCfg() {
       hint: 'Старт записи задаётся вручную — сдвигаются все отметки времени. Удаление пауз убирает точки со скоростью ниже 3 км/ч и схлопывает время стоянок.'
         + (S.has.time ? '' : ' В исходном файле времени не было.'),
       primary: 'Удалить паузы', off: !M.pauses.length && !D.seg.some(v => v < THRESH.pauseKmh), time: true,
-      run: () => { const r = dropPauses(S.pts, D); commit(r.pts, { sel: null, toast: `Удалено ${r.removed} точек паузы · время пересчитано (−${fmtDur(r.savedSec)})` }); },
+      run: () => { const r = dropPauses(S.pts, D); commit(r.pts, { sel: null, samples: collapseSamples(S.samples, r.gaps), toast: `Удалено ${r.removed} точек паузы · время пересчитано (−${fmtDur(r.savedSec)})` }); },
       sec: 'Применить сдвиг', secOff: false, secRun: applyShift };
   }
 }
