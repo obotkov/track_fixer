@@ -25,6 +25,7 @@ const S = {
   ch: { sp: true, hr: true, pw: false },
   toast: '', busy: false, anomIdx: 0,
   active: null,       // point index picked in the points tool
+  approved: [],       // stretches marked OK: [{ a: {lat, lng}, b: {lat, lng} }] — anchor coordinates survive edits
 };
 let D = null, map = null, needFit = false, freeDrawing = false, EM = null;
 let tip = null;   // cursor position for the hover mini summary: { x, y, src: 'map' | 'chart' }
@@ -55,7 +56,10 @@ const span = () => (S.sel ? { a: Math.min(S.sel.a, S.sel.b), b: Math.max(S.sel.a
 function recompute() {
   D = derive(S.pts);
   M.stats = trackStats(S.pts, D);
-  M.anoms = findAnomalies(S.pts, D, CFG);
+  // Approved stretches drop out of diagnostics, paging, the map, the track-line and the points tool.
+  const all = findAnomalies(S.pts, D, CFG), ok = approvedRanges();
+  M.anoms = ok.length ? all.filter(r => !ok.some(([x, y]) => x <= r.a && r.b <= y)) : all;
+  M.approvedCount = all.length - M.anoms.length;
   M.pauses = findPauses(S.pts, D);
   M.splits = kmSplits(S.pts, D);
   if (S.anomIdx >= M.anoms.length) S.anomIdx = 0;
@@ -129,7 +133,7 @@ function loadTrack(r, fileName) {
   Object.assign(S, {
     fileName, baseName: base, trackName: r.name || base, format: r.format,
     pts: r.pts, orig: r.pts, has: { ...r.has }, partB: null, partBHas: null, fileSum: r.summary || {},
-    ver: S.ver + 1, sel: null, dragging: null, dragEdge: false, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false,
+    ver: S.ver + 1, sel: null, dragging: null, dragEdge: false, hover: null, draft: [], history: [], tool: 'cut', anomIdx: 0, busy: false, active: null, dragFile: false, approved: [],
     ch: { sp: true, hr: r.has.hr, pw: false },
   });
   recompute();
@@ -310,6 +314,35 @@ function selectRun(k) {
 
 const selectAnomaly = () => selectRun(S.anomIdx);
 
+/** Point index ranges of approved stretches, found by their anchor coordinates in the current track. */
+function approvedRanges() {
+  if (!S.approved.length) return [];
+  const at = new Map();
+  S.pts.forEach((p, i) => { const k = p.lat + ',' + p.lng; if (!at.has(k)) at.set(k, i); });
+  return S.approved.map(e => [at.get(e.a.lat + ',' + e.a.lng), at.get(e.b.lat + ',' + e.b.lng)]).filter(([x, y]) => x != null && y != null);
+}
+
+/** Mark the current stretch as fine / done: it leaves diagnostics and paging; the next one is selected. */
+function approveCurrent() {
+  const r = M.anoms[S.anomIdx];
+  if (!r) return;
+  const pick = p => ({ lat: p.lat, lng: p.lng });
+  S.approved = S.approved.concat([{ a: pick(S.pts[r.a]), b: pick(S.pts[r.b]) }]);
+  S.ver++;   // refresh memoised chart / map / points markers
+  recompute();
+  const left = M.anoms.length;
+  if (left) selectRun(Math.min(S.anomIdx, left - 1));
+  else Object.assign(S, { sel: null, draft: [], active: null });
+  toast(left ? `Участок одобрен и убран из диагностики · осталось ${left}` : 'Все найденные участки одобрены');
+}
+
+function resetApprovals() {
+  S.approved = [];
+  S.ver++;
+  recompute();
+  toast(`Одобрения сняты · участков в диагностике: ${M.anoms.length}`);
+}
+
 /** Diagnostics arrows: select the previous (-1) or next (+1) detected stretch, wrapping around. */
 function stepAnomaly(dir) {
   const n = M.anoms.length;
@@ -439,11 +472,14 @@ function drawStats() {
 }
 
 function drawDiag() {
-  const an = M.anoms;
+  const an = M.anoms, nOk = M.approvedCount;
   $('diagAnomaly').hidden = !an.length;
   $('cleanText').hidden = !!an.length;
+  $('approvedInfo').hidden = !nOk;
+  $('approvedText').textContent = `Одобрено участков: ${nOk}`;
   if (!an.length) {
-    $('cleanText').textContent = `Выбросов не найдено. Пауз: ${M.pauses.length} · геометрия непрерывна.`;
+    $('cleanText').textContent = (nOk ? `Все найденные участки одобрены (${nOk}).` : 'Выбросов не найдено.')
+      + ` Пауз: ${M.pauses.length}.`;
     return;
   }
   const cur = an[S.anomIdx];
@@ -894,6 +930,8 @@ function bind() {
   $('btnSelectAnomaly').addEventListener('click', selectAnomaly);
   $('btnAnomPrev').addEventListener('click', () => stepAnomaly(-1));
   $('btnAnomNext').addEventListener('click', () => stepAnomaly(1));
+  $('btnApprove').addEventListener('click', approveCurrent);
+  $('btnUnapprove').addEventListener('click', resetApprovals);
   bindConfig();
 
   document.addEventListener('keydown', e => {

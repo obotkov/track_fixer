@@ -56,6 +56,8 @@ a:hover { color: var(--color-accent-700); }
 .anom-nav { display: flex; align-items: center; gap: var(--space-2); }
 .anom-nav .btn-icon { width: 30px; height: 30px; flex: none; }
 .anom-count { flex: 1; text-align: center; font-size: 13px; }
+.diag-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.approved-info { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: auto; padding-top: var(--space-1); border-top: 1px solid var(--color-divider); }
 
 /* — outlier detection settings — */
 .dialog-backdrop { z-index: 2000; }

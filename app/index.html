@@ -90,9 +90,19 @@
           </div>
           <span class="panel-text" id="anomalyText"></span>
           <span class="text-muted small" id="anomalyRange"></span>
-          <button class="btn btn-secondary" id="btnSelectAnomaly" type="button">Выделить участок</button>
+          <div class="diag-actions">
+              <button class="btn btn-secondary" id="btnSelectAnomaly" type="button">Выделить</button>
+              <button class="btn btn-secondary" id="btnApprove" type="button" title="Участок в порядке или уже исправлен — убрать из диагностики">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                Одобрить
+              </button>
+            </div>
         </div>
         <span class="panel-text" id="cleanText">Откройте трек — здесь появятся найденные сбои GPS и паузы.</span>
+        <div class="approved-info small text-muted" id="approvedInfo" hidden>
+          <span id="approvedText"></span>
+          <button class="btn btn-ghost btn-sm" id="btnUnapprove" type="button" title="Вернуть одобренные участки в диагностику">Вернуть</button>
+        </div>
         </div>
 
       <section class="blueprint chartbox">
